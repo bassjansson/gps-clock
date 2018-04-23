@@ -2,8 +2,8 @@
 //========== Defines ==========//
 //=============================//
 
-// Enable GPS interrupt processing
-//#define NMEAGPS_INTERRUPT_PROCESSING
+// Enable serial debug
+#define SERIAL_DEBUG
 
 // GPS serial port pins
 #define GPS_PORT_RX_PIN 2 // Digital Pin 2 (attached to TX of GPS module)
@@ -47,10 +47,14 @@ static const struct
 #error You must define NMEAGPS_PARSE_RMC or NMEAGPS_PARSE_ZDA in NMEAGPS_cfg.h!
 #endif
 
+#if !defined(NMEAGPS_INTERRUPT_PROCESSING)
+#error You must define NMEAGPS_INTERRUPT_PROCESSING in NMEAGPS_cfg.h!
+#endif
 
-//==============================//
-//========== Objects ===========//
-//==============================//
+
+//======================================//
+//========== GPS/RTC Objects ===========//
+//======================================//
 
 // GPS parser and fix
 static NMEAGPS gpsParser; // This parses received characters
@@ -60,14 +64,14 @@ static gps_fix gpsFix;    // This contains all the parsed pieces
 static NeoSWSerial gpsPort(GPS_PORT_RX_PIN, GPS_PORT_TX_PIN);
 
 // RTC object
-RTC_DS1307 rtc;
+static RTC_DS1307 rtc;
 
 
-//==============================//
-//========== Methods ===========//
-//==============================//
+//======================================//
+//========== GPS/RTC Methods ===========//
+//======================================//
 
-// Adjusts time by local time zone and DST
+// Adjusts date/time to local time zone with DST
 void adjustTime(NeoGPS::time_t &dt)
 {
     // Convert date/time structure to seconds
@@ -116,82 +120,91 @@ void adjustTime(NeoGPS::time_t &dt)
     dt = seconds;
 }
 
-// Reads GPS time from the GPS serial port and prints it
-// Also sets the RTC time to the GPS time
-static void readAndPrintGPSTime()
+// Reads GPS time from the GPS serial port
+// and adjusts the RTC time to the GPS time
+static void adjustRTCTimeByGPSTime()
 {
-    while (gpsParser.available(gpsPort))
+    unsigned long start = millis();
+
+    // Read GPS for a maximum of one second
+    while (millis() - start < 1000)
     {
-        gpsFix = gpsParser.read();
-
-        if (gpsFix.valid.time && gpsFix.valid.date)
+        if (gpsParser.available())
         {
-            adjustTime(gpsFix.dateTime);
+            gpsFix = gpsParser.read();
 
-            Serial.print("GPS Time: ");
-            Serial << gpsFix.dateTime;
-            Serial.println();
+            if (gpsFix.valid.time && gpsFix.valid.date)
+            {
+                // Adjust GPS date/time to local time zone with DST
+                adjustTime(gpsFix.dateTime);
 
-            // Set RTC time to GPS time
-            rtc.adjust(DateTime((NeoGPS::clock_t)gpsFix.dateTime + SECONDS_FROM_1970_TO_2000));
+                // Adjust RTC date/time to GPS date/time
+                rtc.adjust(DateTime((NeoGPS::clock_t)gpsFix.dateTime + SECONDS_FROM_1970_TO_2000));
 
-            break;
+                // Print GPS and RTC date/time
+                #ifdef SERIAL_DEBUG
+                    Serial.print("Read GPS Time: ");
+                    Serial << gpsFix.dateTime;
+                    Serial.println();
+
+                    DateTime now = rtc.now();
+                    Serial.print("Adjusted RTC Time: ");
+                    Serial.print(now.year(), DEC);
+                    Serial.print('-');
+                    Serial.print(now.month(), DEC);
+                    Serial.print('-');
+                    Serial.print(now.day(), DEC);
+                    Serial.print(' ');
+                    Serial.print(now.hour(), DEC);
+                    Serial.print(':');
+                    Serial.print(now.minute(), DEC);
+                    Serial.print(':');
+                    Serial.print(now.second(), DEC);
+                    Serial.println();
+                #endif
+
+                // Break out of read loop
+                break;
+            }
         }
     }
 }
 
-// Handler to enable interrupt processing
-#ifdef NMEAGPS_INTERRUPT_PROCESSING
-static void gpsParserHandler(uint8_t c)
+// Handler to enable GPS interrupt processing
+static void gpsParserInterruptHandler(uint8_t c)
 {
     gpsParser.handle(c);
 }
-#endif
 
-// Arduino setup
+
+//======================================//
+//========== Arduino Methods ===========//
+//======================================//
+
 void setup()
 {
     // Begin debug serial communication
-    Serial.begin(9600);
-    while (!Serial);
-    Serial.flush();
+    #ifdef SERIAL_DEBUG
+        Serial.begin(9600);
+        while (!Serial);
+        Serial.flush();
+    #endif
 
     // Begin GPS serial communication
+    gpsPort.attachInterrupt(gpsParserInterruptHandler);
     gpsPort.begin(9600);
-#ifdef NMEAGPS_INTERRUPT_PROCESSING
-    gpsPort.attachInterrupt(gpsParserHandler);
-    Serial.println("GPS interrupt processing enabled!");
-#endif
 
-    // Begin RTC
+    // Begin RTC I2C communication
     rtc.begin();
 }
 
-// Arduino loop
-DateTime rtcTime;
 void loop()
 {
-    // Read and print GPS time
-    readAndPrintGPSTime();
+    adjustRTCTimeByGPSTime();
 
-    // Read and print RTC time
-    DateTime now = rtc.now();
-    if (now.secondstime() > rtcTime.secondstime())
-    {
-        rtcTime = now;
+    while (millis() % 5000 > 0);
 
-        Serial.print("RTC Time: ");
-        Serial.print(now.year(), DEC);
-        Serial.print('-');
-        Serial.print(now.month(), DEC);
-        Serial.print('-');
-        Serial.print(now.day(), DEC);
-        Serial.print(' ');
-        Serial.print(now.hour(), DEC);
-        Serial.print(':');
-        Serial.print(now.minute(), DEC);
-        Serial.print(':');
-        Serial.print(now.second(), DEC);
-        Serial.println();
-    }
+    #ifdef SERIAL_DEBUG
+        Serial.println("End of loop!");
+    #endif
 }
