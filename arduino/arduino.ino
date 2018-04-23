@@ -5,8 +5,9 @@
 // Enable serial debug
 #define SERIAL_DEBUG
 
-// Motor direction
-#define MOTOR_DIRECTION HIGH // High or low
+// Motor settings
+#define MOTOR_DIRECTION HIGH // HIGH or LOW
+#define MOTOR_MAX_SPEED 200  // 0 - 255
 
 // Metal sensor pins
 #define METAL_SENSOR_HOUR_PIN   11 // Digital Pin 11
@@ -80,7 +81,7 @@ static RTC_DS1307 rtc;
 //======================================//
 
 // Adjusts date/time to local time zone with DST
-void adjustTime(NeoGPS::time_t &dt)
+static void adjustTime(NeoGPS::time_t &dt)
 {
     // Convert date/time structure to seconds
     NeoGPS::clock_t seconds = dt;
@@ -130,7 +131,7 @@ void adjustTime(NeoGPS::time_t &dt)
 
 // Reads GPS time from the GPS serial port
 // and adjusts the RTC time to the GPS time
-static void adjustRTCTimeByGPSTime()
+static void adjustRTCTimeToGPSTime()
 {
     unsigned long start = millis();
 
@@ -220,6 +221,62 @@ void setMotorSpeed(byte speed)
 }
 
 
+//====================================//
+//========== Clock Methods ===========//
+//====================================//
+
+NeoGPS::clock_t getTargetClockTime()
+{
+    // Adjust RTC time to GPS time
+    adjustRTCTimeToGPSTime();
+
+    // Get current RTC date/time
+    DateTime now = rtc.now();
+
+    // Convert date/time to clock time in seconds
+    return (now.hour() % 12) * NeoGPS::SECONDS_PER_HOUR +
+        now.minute() * NeoGPS::SECONDS_PER_MINUTE +
+        now.second();
+}
+
+void setClockToTargetClockTime()
+{
+    // Set clock time to zero
+    NeoGPS::clock_t clockTime = 0;
+
+    // Set motor to maximum speed
+    setMotorSpeed(MOTOR_MAX_SPEED);
+
+    // Wait until we hit the clock's zero position
+    while (!digitalRead(METAL_SENSOR_HOUR_PIN) ||
+           !digitalRead(METAL_SENSOR_MINUTE_PIN) ||
+           !digitalRead(METAL_SENSOR_SECOND_PIN));
+
+    // Increment clock time until we reached target clock time
+    while (clockTime < getTargetClockTime())
+    {
+        while (digitalRead(METAL_SENSOR_SECOND_PIN));
+        while (!digitalRead(METAL_SENSOR_SECOND_PIN));
+
+        // Add one minute to clock time
+        clockTime = (clockTime + NeoGPS::SECONDS_PER_MINUTE) % (NeoGPS::SECONDS_PER_DAY / 2);
+    }
+
+    // Stop the motor
+    setMotorSpeed(0);
+}
+
+void calibrateClockSpeed()
+{
+    // TODO
+}
+
+void adjustClockSpeed()
+{
+    // TODO
+}
+
+
 //======================================//
 //========== Arduino Methods ===========//
 //======================================//
@@ -247,24 +304,9 @@ void setup()
     pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
     pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
     pinMode(METAL_SENSOR_SECOND_PIN, INPUT);
-
-
-    // TODO:
-    // To set motor speed:
-    setMotorSpeed(0);
-    // To read metal sensors:
-    digitalRead(METAL_SENSOR_HOUR_PIN);
-    digitalRead(METAL_SENSOR_MINUTE_PIN);
-    digitalRead(METAL_SENSOR_SECOND_PIN);
 }
 
 void loop()
 {
-    adjustRTCTimeByGPSTime();
-
-    delay(5000);
-
-    #ifdef SERIAL_DEBUG
-        Serial.println("End of loop!");
-    #endif
+    // TODO
 }
