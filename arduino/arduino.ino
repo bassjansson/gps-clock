@@ -5,6 +5,9 @@
 // Enable serial debug
 #define SERIAL_DEBUG
 
+// Motor direction
+#define MOTOR_DIRECTION HIGH // High or low
+
 // GPS serial port pins
 #define GPS_PORT_RX_PIN 2 // Digital Pin 2 (attached to TX of GPS module)
 #define GPS_PORT_TX_PIN 3 // Digital Pin 3 (attached to RX of GPS module)
@@ -177,6 +180,41 @@ static void gpsParserInterruptHandler(uint8_t c)
 }
 
 
+//====================================//
+//========== Motor Methods ===========//
+//====================================//
+
+void setupMotorShield()
+{
+    // Setup motor 1
+    pinMode(4, OUTPUT); // 1A
+    pinMode(5, OUTPUT); // 1B
+    pinMode(9, OUTPUT); // P_1
+
+    digitalWrite(4, MOTOR_DIRECTION);
+    digitalWrite(5, !MOTOR_DIRECTION);
+    digitalWrite(9, LOW);
+
+    // Setup motor 2
+    pinMode(7, OUTPUT);  // 2A
+    pinMode(8, OUTPUT);  // 2B
+    pinMode(10, OUTPUT); // P_2
+
+    digitalWrite(7, LOW);
+    digitalWrite(8, LOW);
+    digitalWrite(10, LOW);
+
+    // Enable motor shield
+    pinMode(6, OUTPUT); // EN
+    digitalWrite(6, HIGH);
+}
+
+void setMotorSpeed(byte speed)
+{
+    analogWrite(9, speed); // Motor 1
+}
+
+
 //======================================//
 //========== Arduino Methods ===========//
 //======================================//
@@ -196,6 +234,9 @@ void setup()
 
     // Begin RTC I2C communication
     rtc.begin();
+
+    // Setup motor shield
+    setupMotorShield();
 }
 
 void loop()
