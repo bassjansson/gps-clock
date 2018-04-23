@@ -8,6 +8,11 @@
 // Motor direction
 #define MOTOR_DIRECTION HIGH // High or low
 
+// Metal sensor pins
+#define METAL_SENSOR_HOUR_PIN   11 // Digital Pin 11
+#define METAL_SENSOR_MINUTE_PIN 12 // Digital Pin 12
+#define METAL_SENSOR_SECOND_PIN 13 // Digital Pin 13
+
 // GPS serial port pins
 #define GPS_PORT_RX_PIN 2 // Digital Pin 2 (attached to TX of GPS module)
 #define GPS_PORT_TX_PIN 3 // Digital Pin 3 (attached to RX of GPS module)
@@ -237,6 +242,14 @@ void setup()
 
     // Setup motor shield
     setupMotorShield();
+
+    // TODO:
+    // To set motor speed:
+    setMotorSpeed(127);
+    // To read metal sensors:
+    digitalRead(METAL_SENSOR_HOUR_PIN);
+    digitalRead(METAL_SENSOR_MINUTE_PIN);
+    digitalRead(METAL_SENSOR_SECOND_PIN);
 }
 
 void loop()
