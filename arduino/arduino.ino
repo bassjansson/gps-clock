@@ -243,9 +243,15 @@ void setup()
     // Setup motor shield
     setupMotorShield();
 
+    // Setup metal sensor pins
+    pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
+    pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
+    pinMode(METAL_SENSOR_SECOND_PIN, INPUT);
+
+
     // TODO:
     // To set motor speed:
-    setMotorSpeed(127);
+    setMotorSpeed(0);
     // To read metal sensors:
     digitalRead(METAL_SENSOR_HOUR_PIN);
     digitalRead(METAL_SENSOR_MINUTE_PIN);
@@ -256,7 +262,7 @@ void loop()
 {
     adjustRTCTimeByGPSTime();
 
-    while (millis() % 5000 > 0);
+    delay(5000);
 
     #ifdef SERIAL_DEBUG
         Serial.println("End of loop!");
