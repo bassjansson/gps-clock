@@ -12,7 +12,6 @@
 // Metal sensor pins
 #define METAL_SENSOR_HOUR_PIN   11 // Digital Pin 11
 #define METAL_SENSOR_MINUTE_PIN 12 // Digital Pin 12
-#define METAL_SENSOR_SECOND_PIN 13 // Digital Pin 13
 
 // GPS serial port pins
 #define GPS_PORT_RX_PIN 2 // Digital Pin 2 (attached to TX of GPS module)
@@ -221,6 +220,21 @@ void setMotorSpeed(byte speed)
 }
 
 
+//===========================================//
+//========== Metal Sensor Methods ===========//
+//===========================================//
+
+bool isHardwareClockAtZeroHours()
+{
+    return digitalRead(METAL_SENSOR_HOUR_PIN);
+}
+
+bool isHardwareClockAtZeroMinutes()
+{
+    return digitalRead(METAL_SENSOR_MINUTE_PIN);
+}
+
+
 //====================================//
 //========== Clock Methods ===========//
 //====================================//
@@ -303,7 +317,6 @@ void setup()
     // Setup metal sensor pins
     pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
     pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
-    pinMode(METAL_SENSOR_SECOND_PIN, INPUT);
 }
 
 void loop()
