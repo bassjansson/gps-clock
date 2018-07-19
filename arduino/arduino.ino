@@ -6,8 +6,9 @@
 //#define SERIAL_DEBUG
 
 // Motor settings
-#define MOTOR_DIRECTION HIGH // HIGH or LOW
-#define MOTOR_MAX_SPEED 200  // 0 - 255
+#define MOTOR_DIRECTION   HIGH // HIGH or LOW
+#define MOTOR_START_SPEED 128  // 0 - 255
+#define MOTOR_MAX_SPEED   255  // 0 - 255
 
 // Metal sensor pins
 #define METAL_SENSOR_HOUR_PIN   11 // Digital Pin 11
@@ -224,12 +225,12 @@ void setMotorSpeed(byte speed)
 //========== Metal Sensor Methods ===========//
 //===========================================//
 
-bool isHardwareClockAtZeroHours()
+bool isClockAtZeroHours()
 {
     return digitalRead(METAL_SENSOR_HOUR_PIN);
 }
 
-bool isHardwareClockAtZeroMinutes()
+bool isClockAtZeroMinutes()
 {
     return digitalRead(METAL_SENSOR_MINUTE_PIN);
 }
@@ -287,7 +288,36 @@ void calibrateClockSpeed()
 
 void adjustClockSpeed()
 {
-    // TODO
+    // Declare static clock time and clock speed
+    static NeoGPS::clock_t clockTime = 0; // seconds
+    static byte clockSpeed = MOTOR_START_SPEED;
+
+    // Check if it is time to adjust the clock speed
+    if (isClockAtZeroMinutes())
+    {
+        // Update clock time
+        if (isClockAtZeroHours())
+            clockTime = 0;
+        else
+            clockTime = (clockTime + NeoGPS::SECONDS_PER_HOUR) % (NeoGPS::SECONDS_PER_HOUR * 12);
+
+        // Get clock time difference between current and target clock time
+        NeoGPS::clock_t clockTimeDifference = clockTime - getTargetClockTime();
+
+        // Adjust clock time difference if it is bigger than six hours
+        if (abs(clockTimeDifference) > NeoGPS::SECONDS_PER_HOUR * 6)
+            clockTimeDifference -= NeoGPS::SECONDS_PER_HOUR * 12 * (clockTimeDifference > 0 ? 1 : -1);
+
+        // Adjust clock speed if clock time difference is bigger than a minute
+        if (abs(clockTimeDifference) > NeoGPS::SECONDS_PER_MINUTE)
+            clockSpeed -= (clockTimeDifference > 0 ? 1 : -1);
+
+        // Set the motor speed to the clock speed
+        setMotorSpeed(clockSpeed);
+
+        // Wait until we passed zero minutes
+        while (isClockAtZeroMinutes());
+    }
 }
 
 
@@ -313,6 +343,7 @@ void setup()
 
     // Setup motor shield
     setupMotorShield();
+    setMotorSpeed(MOTOR_START_SPEED);
 
     // Setup metal sensor pins
     pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
@@ -321,5 +352,6 @@ void setup()
 
 void loop()
 {
-    // TODO
+    // Just keep adjusting the clock speed
+    adjustClockSpeed();
 }
