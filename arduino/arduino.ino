@@ -3,7 +3,7 @@
 //=============================//
 
 // Enable serial debug
-#define SERIAL_DEBUG
+//#define SERIAL_DEBUG
 
 // Motor settings
 #define MOTOR_DIRECTION HIGH // HIGH or LOW
