@@ -262,28 +262,27 @@ void setClockToTargetClockTime()
     // Set motor to maximum speed
     setMotorSpeed(MOTOR_MAX_SPEED);
 
-    // Wait until we hit the clock's zero position
-    while (!digitalRead(METAL_SENSOR_HOUR_PIN) ||
-           !digitalRead(METAL_SENSOR_MINUTE_PIN) ||
-           !digitalRead(METAL_SENSOR_SECOND_PIN));
+    // Wait until we hit zero minutes and zero hours
+    while (!(isClockAtZeroMinutes() && isClockAtZeroHours())) void;
+
+    // Wait until we passed zero minutes
+    while (isClockAtZeroMinutes()) void;
 
     // Increment clock time until we reached target clock time
     while (clockTime < getTargetClockTime())
     {
-        while (digitalRead(METAL_SENSOR_SECOND_PIN));
-        while (!digitalRead(METAL_SENSOR_SECOND_PIN));
+        // Wait until we hit zero minutes again
+        while (!isClockAtZeroMinutes()) void;
 
-        // Add one minute to clock time
-        clockTime = (clockTime + NeoGPS::SECONDS_PER_MINUTE) % (NeoGPS::SECONDS_PER_DAY / 2);
+        // Add one hour to clock time
+        clockTime = (clockTime + NeoGPS::SECONDS_PER_HOUR) % (NeoGPS::SECONDS_PER_HOUR * 12);
+
+        // Wait until we passed zero minutes
+        while (isClockAtZeroMinutes()) void;
     }
 
-    // Stop the motor
-    setMotorSpeed(0);
-}
-
-void calibrateClockSpeed()
-{
-    // TODO
+    // Set motor to start speed
+    setMotorSpeed(MOTOR_START_SPEED);
 }
 
 void adjustClockSpeed()
@@ -316,7 +315,7 @@ void adjustClockSpeed()
         setMotorSpeed(clockSpeed);
 
         // Wait until we passed zero minutes
-        while (isClockAtZeroMinutes());
+        while (isClockAtZeroMinutes()) void;
     }
 }
 
@@ -330,7 +329,7 @@ void setup()
     // Begin debug serial communication
     #ifdef SERIAL_DEBUG
         Serial.begin(9600);
-        while (!Serial);
+        while (!Serial) void;
         Serial.flush();
     #endif
 
@@ -348,6 +347,9 @@ void setup()
     // Setup metal sensor pins
     pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
     pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
+
+    // Set clock to target clock time
+    setClockToTargetClockTime();
 }
 
 void loop()
