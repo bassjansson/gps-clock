@@ -1,6 +1,6 @@
-//=============================//
-//========== Defines ==========//
-//=============================//
+//==================================//
+//========== User Defines ==========//
+//==================================//
 
 // Enable serial debug
 //#define SERIAL_DEBUG
@@ -10,9 +10,10 @@
 #define MOTOR_START_SPEED 128  // 0 - 255
 #define MOTOR_MAX_SPEED   255  // 0 - 255
 
-// Metal sensor pins
-#define METAL_SENSOR_HOUR_PIN   11 // Digital Pin 11
-#define METAL_SENSOR_MINUTE_PIN 12 // Digital Pin 12
+// Metal sensor settings
+#define METAL_SENSOR_INVERT_INPUT false // true or false
+#define METAL_SENSOR_HOUR_PIN     11    // Digital Pin 11
+#define METAL_SENSOR_MINUTE_PIN   12    // Digital Pin 12
 
 // GPS serial port pins
 #define GPS_PORT_RX_PIN 2 // Digital Pin 2 (attached to TX of GPS module)
@@ -227,12 +228,12 @@ void setMotorSpeed(byte speed)
 
 bool isClockAtZeroHours()
 {
-    return digitalRead(METAL_SENSOR_HOUR_PIN);
+    return digitalRead(METAL_SENSOR_HOUR_PIN) ? !METAL_SENSOR_INVERT_INPUT : METAL_SENSOR_INVERT_INPUT;
 }
 
 bool isClockAtZeroMinutes()
 {
-    return digitalRead(METAL_SENSOR_MINUTE_PIN);
+    return digitalRead(METAL_SENSOR_MINUTE_PIN) ? !METAL_SENSOR_INVERT_INPUT : METAL_SENSOR_INVERT_INPUT;
 }
 
 
