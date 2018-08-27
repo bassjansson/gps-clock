@@ -35,6 +35,11 @@ static const struct
     static const uint8_t fallHour    =  2; // 2AM
 } EU_DST;
 
+// Time constants
+static const int32_t DEF_SECONDS_PER_MINUTE = 60;
+static const int32_t DEF_SECONDS_PER_HOUR   = 3600;
+static const int32_t DEF_SECONDS_PER_CLOCK  = 43200;
+
 
 //==============================//
 //========== Includes ==========//
@@ -77,8 +82,9 @@ static NeoSWSerial gpsPort(GPS_PORT_RX_PIN, GPS_PORT_TX_PIN);
 // RTC object
 static RTC_DS1307 rtc;
 
-// Clock time
+// Clock time and clock speed
 static int32_t clockTime = 0; // seconds
+static byte clockSpeed = MOTOR_START_SPEED; // 0 - 255
 
 
 //======================================//
@@ -254,15 +260,15 @@ int32_t getTargetClockTime()
     DateTime now = rtc.now();
 
     // Convert date/time to clock time in seconds
-    return (now.hour() % 12) * NeoGPS::SECONDS_PER_HOUR +
-        now.minute() * NeoGPS::SECONDS_PER_MINUTE +
+    return (now.hour() % 12) * DEF_SECONDS_PER_HOUR +
+        now.minute() * DEF_SECONDS_PER_MINUTE +
         now.second();
 }
 
 void setClockToTargetClockTime()
 {
     // Set clock time to zero
-    int32_t clockTime = METAL_SENSOR_HOUR_POS * NeoGPS::SECONDS_PER_HOUR; // The hour sensor is located at 03:00
+    int32_t clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
 
     // Set motor to double speed
     setMotorSpeed(MOTOR_DOUBLE_SPEED);
@@ -277,17 +283,17 @@ void setClockToTargetClockTime()
     while (true)
     {
         int32_t targetClockTimeFull = getTargetClockTime();
-        int32_t targetClockTimeMinutes = targetClockTimeFull % NeoGPS::SECONDS_PER_HOUR;
+        int32_t targetClockTimeMinutes = targetClockTimeFull % DEF_SECONDS_PER_HOUR;
         int32_t targetClockTimeHours = targetClockTimeFull - targetClockTimeMinutes;
     
         if (clockTime == targetClockTimeHours)
         {
             #ifdef SERIAL_DEBUG
                 Serial.print("[setClockToTargetClockTime] All hours added, remaining minutes to add: ");
-                Serial.println(targetClockTimeMinutes * 2 / NeoGPS::SECONDS_PER_MINUTE);
+                Serial.println(targetClockTimeMinutes * 2 / DEF_SECONDS_PER_MINUTE);
             #endif
             
-            int32_t clockTimeWhenFullySet = (targetClockTimeFull + targetClockTimeMinutes) % (NeoGPS::SECONDS_PER_HOUR * 12);
+            int32_t clockTimeWhenFullySet = (targetClockTimeFull + targetClockTimeMinutes) % DEF_SECONDS_PER_CLOCK;
 
             while (true)
             {
@@ -295,8 +301,13 @@ void setClockToTargetClockTime()
                 int32_t clockTimeDifference = clockTimeWhenFullySet - getTargetClockTime();
         
                 // Adjust clock time difference if it is bigger than six hours
-                if (abs(clockTimeDifference) > NeoGPS::SECONDS_PER_HOUR * 6)
-                    clockTimeDifference -= NeoGPS::SECONDS_PER_HOUR * 12 * (clockTimeDifference > 0 ? 1 : -1);
+                if (abs(clockTimeDifference) > DEF_SECONDS_PER_HOUR * 6)
+                {
+                    if (clockTimeDifference > 0)
+                        clockTimeDifference -= DEF_SECONDS_PER_CLOCK;
+                    else
+                        clockTimeDifference += DEF_SECONDS_PER_CLOCK;
+                }
                     
                 if (clockTimeDifference <= 0)
                     break;
@@ -323,39 +334,67 @@ void setClockToTargetClockTime()
         while (!isClockAtZeroMinutes()) void;
 
         // Add one hour to clock time
-        clockTime = (clockTime + NeoGPS::SECONDS_PER_HOUR) % (NeoGPS::SECONDS_PER_HOUR * 12);
+        clockTime = (clockTime + DEF_SECONDS_PER_HOUR) % DEF_SECONDS_PER_CLOCK;
 
         #ifdef SERIAL_DEBUG
             Serial.print("[setClockToTargetClockTime] Added one hour to clock time: ");
-            Serial.println(clockTime / NeoGPS::SECONDS_PER_HOUR);
+            Serial.println(clockTime / DEF_SECONDS_PER_HOUR);
         #endif
     }
 }
 
 void adjustClockSpeed()
 {
-    // Declare static clock time and clock speed
-    static byte clockSpeed = MOTOR_START_SPEED;
-
     // Check if it is time to adjust the clock speed
     if (isClockAtZeroMinutes())
     {
         // Update clock time
         if (isClockAtZeroHours())
-            clockTime = METAL_SENSOR_HOUR_POS * NeoGPS::SECONDS_PER_HOUR; // The hour sensor is located at 03:00
+            clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
         else
-            clockTime = (clockTime + NeoGPS::SECONDS_PER_HOUR) % (NeoGPS::SECONDS_PER_HOUR * 12);
+            clockTime = (clockTime + DEF_SECONDS_PER_HOUR) % DEF_SECONDS_PER_CLOCK;
+
+        #ifdef SERIAL_DEBUG
+            Serial.print("[adjustClockSpeed] Current clock time in hours: ");
+            Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
+        #endif
 
         // Get clock time difference between current and target clock time
         int32_t clockTimeDifference = clockTime - getTargetClockTime();
 
+        #ifdef SERIAL_DEBUG
+            Serial.print("[adjustClockSpeed] Clock time difference in hours (1): ");
+            Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
+        #endif
+
         // Adjust clock time difference if it is bigger than six hours
-        if (abs(clockTimeDifference) > NeoGPS::SECONDS_PER_HOUR * 6)
-            clockTimeDifference -= NeoGPS::SECONDS_PER_HOUR * 12 * (clockTimeDifference > 0 ? 1 : -1);
+        if (abs(clockTimeDifference) > DEF_SECONDS_PER_HOUR * 6)
+        {
+            if (clockTimeDifference > 0)
+                clockTimeDifference -= DEF_SECONDS_PER_CLOCK;
+            else
+                clockTimeDifference += DEF_SECONDS_PER_CLOCK;
+        }
+
+        #ifdef SERIAL_DEBUG
+            Serial.print("[adjustClockSpeed] Clock time difference in hours (2): ");
+            Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
+        #endif
 
         // Adjust clock speed if clock time difference is bigger than a minute
-        if (abs(clockTimeDifference) > NeoGPS::SECONDS_PER_MINUTE)
-            clockSpeed -= (clockTimeDifference > 0 ? 1 : -1);
+        if (abs(clockTimeDifference) > 30) // Half a minute
+        {
+            if (clockTimeDifference > 0)
+                clockSpeed--;
+            else
+                clockSpeed++;
+        }
+
+        #ifdef SERIAL_DEBUG
+            Serial.print("[adjustClockSpeed] Adjusted clock speed: ");
+            Serial.println(clockSpeed);
+            Serial.println();
+        #endif
 
         // Set the motor speed to the clock speed
         setMotorSpeed(clockSpeed);
