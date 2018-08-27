@@ -268,7 +268,7 @@ int32_t getTargetClockTime()
 void setClockToTargetClockTime()
 {
     // Set clock time to zero
-    int32_t clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
+    clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
 
     // Set motor to double speed
     setMotorSpeed(MOTOR_DOUBLE_SPEED);
@@ -290,7 +290,7 @@ void setClockToTargetClockTime()
         {
             #ifdef SERIAL_DEBUG
                 Serial.print("[setClockToTargetClockTime] All hours added, remaining minutes to add: ");
-                Serial.println(targetClockTimeMinutes * 2 / DEF_SECONDS_PER_MINUTE);
+                Serial.println((float)targetClockTimeMinutes * 2 / DEF_SECONDS_PER_MINUTE);
             #endif
             
             int32_t clockTimeWhenFullySet = (targetClockTimeFull + targetClockTimeMinutes) % DEF_SECONDS_PER_CLOCK;
@@ -316,8 +316,12 @@ void setClockToTargetClockTime()
             // Set motor to start speed
             setMotorSpeed(MOTOR_START_SPEED);
 
+            // Update clock time in case we waited longer than an hour
+            clockTime = clockTimeWhenFullySet / DEF_SECONDS_PER_HOUR;
+
             #ifdef SERIAL_DEBUG
-                Serial.println("[setClockToTargetClockTime] Clock reached target clock time! Now running at normal speed");
+                Serial.print("[setClockToTargetClockTime] Clock reached target clock time! Now running at normal speed. Current clock time: ");
+                Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
             #endif
 
             // Delay to make sure we passed zero minutes
@@ -338,7 +342,7 @@ void setClockToTargetClockTime()
 
         #ifdef SERIAL_DEBUG
             Serial.print("[setClockToTargetClockTime] Added one hour to clock time: ");
-            Serial.println(clockTime / DEF_SECONDS_PER_HOUR);
+            Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
         #endif
     }
 }
@@ -348,6 +352,11 @@ void adjustClockSpeed()
     // Check if it is time to adjust the clock speed
     if (isClockAtZeroMinutes())
     {
+        #ifdef SERIAL_DEBUG
+            Serial.print("[adjustClockSpeed] Current clock time in hours: ");
+            Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
+        #endif
+        
         // Update clock time
         if (isClockAtZeroHours())
             clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
@@ -355,7 +364,7 @@ void adjustClockSpeed()
             clockTime = (clockTime + DEF_SECONDS_PER_HOUR) % DEF_SECONDS_PER_CLOCK;
 
         #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Current clock time in hours: ");
+            Serial.print("[adjustClockSpeed] Updated clock time in hours: ");
             Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
         #endif
 
