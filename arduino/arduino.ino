@@ -390,14 +390,22 @@ void adjustClockSpeed()
             Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
         #endif
 
-        // Adjust clock speed if clock time difference is bigger than a minute
-        if (abs(clockTimeDifference) > 30) // Half a minute
-        {
-            if (clockTimeDifference > 0)
-                clockSpeed--;
-            else
-                clockSpeed++;
-        }
+        // Clip clock time difference to half an hour min and max
+        if (clockTimeDifference > DEF_SECONDS_PER_HOUR / 2)
+            clockTimeDifference = DEF_SECONDS_PER_HOUR / 2;
+
+        if (clockTimeDifference < -DEF_SECONDS_PER_HOUR / 2)
+            clockTimeDifference = -DEF_SECONDS_PER_HOUR / 2;
+
+        #ifdef SERIAL_DEBUG
+            Serial.print("[adjustClockSpeed] Clock time difference in hours (3): ");
+            Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
+        #endif
+
+        // Calculate the new clock speed
+        clockSpeed = (MOTOR_START_SPEED * 2 - MOTOR_DOUBLE_SPEED)
+            + (MOTOR_DOUBLE_SPEED - MOTOR_START_SPEED)
+            * DEF_SECONDS_PER_HOUR / (clockTimeDifference + DEF_SECONDS_PER_HOUR);
 
         #ifdef SERIAL_DEBUG
             Serial.print("[adjustClockSpeed] Adjusted clock speed: ");
