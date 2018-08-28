@@ -285,21 +285,21 @@ void setClockToTargetClockTime()
         int32_t targetClockTimeFull = getTargetClockTime();
         int32_t targetClockTimeMinutes = targetClockTimeFull % DEF_SECONDS_PER_HOUR;
         int32_t targetClockTimeHours = targetClockTimeFull - targetClockTimeMinutes;
-    
+
         if (clockTime == targetClockTimeHours)
         {
             #ifdef SERIAL_DEBUG
                 Serial.print("[setClockToTargetClockTime] All hours added, remaining minutes to add: ");
                 Serial.println((float)targetClockTimeMinutes * 2 / DEF_SECONDS_PER_MINUTE);
             #endif
-            
+
             int32_t clockTimeWhenFullySet = (targetClockTimeFull + targetClockTimeMinutes) % DEF_SECONDS_PER_CLOCK;
 
             while (true)
             {
                 // Get clock time difference between current and target clock time
                 int32_t clockTimeDifference = clockTimeWhenFullySet - getTargetClockTime();
-        
+
                 // Adjust clock time difference if it is bigger than six hours
                 if (abs(clockTimeDifference) > DEF_SECONDS_PER_HOUR * 6)
                 {
@@ -308,7 +308,7 @@ void setClockToTargetClockTime()
                     else
                         clockTimeDifference += DEF_SECONDS_PER_CLOCK;
                 }
-                    
+
                 if (clockTimeDifference <= 0)
                     break;
             }
@@ -327,7 +327,7 @@ void setClockToTargetClockTime()
             // Delay to make sure we passed zero minutes
             if (targetClockTimeMinutes % 1800 < 300)
                 delay(600 * 1000); // 10 minutes
-    
+
             return;
         }
 
@@ -356,7 +356,7 @@ void adjustClockSpeed()
             Serial.print("[adjustClockSpeed] Current clock time in hours: ");
             Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
         #endif
-        
+
         // Update clock time
         if (isClockAtZeroHours())
             clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
