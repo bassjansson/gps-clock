@@ -352,11 +352,6 @@ void adjustClockSpeed()
     // Check if it is time to adjust the clock speed
     if (isClockAtZeroMinutes())
     {
-        #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Current clock time in hours: ");
-            Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
-        #endif
-
         // Update clock time
         if (isClockAtZeroHours())
             clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
@@ -364,7 +359,7 @@ void adjustClockSpeed()
             clockTime = (clockTime + DEF_SECONDS_PER_HOUR) % DEF_SECONDS_PER_CLOCK;
 
         #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Updated clock time in hours: ");
+            Serial.print("[adjustClockSpeed] Current clock time in hours: ");
             Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
         #endif
 
@@ -372,7 +367,7 @@ void adjustClockSpeed()
         int32_t clockTimeDifference = clockTime - getTargetClockTime();
 
         #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Clock time difference in hours (1): ");
+            Serial.print("[adjustClockSpeed] Clock time difference in hours (raw): ");
             Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
         #endif
 
@@ -386,7 +381,7 @@ void adjustClockSpeed()
         }
 
         #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Clock time difference in hours (2): ");
+            Serial.print("[adjustClockSpeed] Clock time difference in hours (modulo)): ");
             Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
         #endif
 
@@ -398,7 +393,7 @@ void adjustClockSpeed()
             clockTimeDifference = -DEF_SECONDS_PER_HOUR / 2;
 
         #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Clock time difference in hours (3): ");
+            Serial.print("[adjustClockSpeed] Clock time difference in hours (clipped): ");
             Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
         #endif
 
