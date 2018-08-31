@@ -11,10 +11,9 @@
 #define MOTOR_DOUBLE_SPEED 200  // 0 - 255 (OFFICAL)
 
 // Metal sensor settings
-#define METAL_SENSOR_INVERT_INPUT true // true or false  (OFFICAL)
-#define METAL_SENSOR_HOUR_PIN     12   // Digital Pin 12 (OFFICAL)
-#define METAL_SENSOR_MINUTE_PIN   11   // Digital Pin 11 (OFFICAL)
-#define METAL_SENSOR_HOUR_POS     3    // Hours (0 - 11) (OFFICAL)
+#define METAL_SENSOR_HOUR_PIN   12 // Digital Pin 12 (OFFICAL)
+#define METAL_SENSOR_MINUTE_PIN 11 // Digital Pin 11 (OFFICAL)
+#define METAL_SENSOR_HOUR_POS   3  // Hours (0 - 11) (OFFICAL)
 
 // GPS serial port pins
 #define GPS_PORT_RX_PIN 2 // Digital Pin 2 (attached to TX of GPS module)
@@ -238,14 +237,24 @@ void setMotorSpeed(byte speed)
 
 bool isClockAtZeroHours()
 {
-    // TODO: Create a more reliable way to read the sensor
-    return digitalRead(METAL_SENSOR_HOUR_PIN) ? !METAL_SENSOR_INVERT_INPUT : METAL_SENSOR_INVERT_INPUT;
+    return !digitalRead(METAL_SENSOR_HOUR_PIN);
 }
 
 bool isClockAtZeroMinutes()
 {
-    // TODO: Create a more reliable way to read the sensor
-    return digitalRead(METAL_SENSOR_MINUTE_PIN) ? !METAL_SENSOR_INVERT_INPUT : METAL_SENSOR_INVERT_INPUT;
+    if (!digitalRead(METAL_SENSOR_MINUTE_PIN))
+    {
+        delay(500); // 500 ms
+
+        if (!digitalRead(METAL_SENSOR_MINUTE_PIN))
+        {
+            delay(500); // 500 ms
+
+            return !digitalRead(METAL_SENSOR_MINUTE_PIN);
+        }
+    }
+
+    return false;
 }
 
 
