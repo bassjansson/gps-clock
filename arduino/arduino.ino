@@ -163,12 +163,12 @@ static void adjustRTCTimeToGPSTime()
 
                 // Print GPS and RTC date/time
                 #ifdef SERIAL_DEBUG
-                    Serial.print("Read GPS Time: ");
+                    Serial.print("[adjustRTCTimeToGPSTime] Read GPS Time: ");
                     Serial << gpsFix.dateTime;
                     Serial.println();
 
                     DateTime now = rtc.now();
-                    Serial.print("Adjusted RTC Time: ");
+                    Serial.print("[adjustRTCTimeToGPSTime] Adjusted RTC Time: ");
                     Serial.print(now.year(), DEC);
                     Serial.print('-');
                     Serial.print(now.month(), DEC);
@@ -238,11 +238,13 @@ void setMotorSpeed(byte speed)
 
 bool isClockAtZeroHours()
 {
+    // TODO: Create a more reliable way to read the sensor
     return digitalRead(METAL_SENSOR_HOUR_PIN) ? !METAL_SENSOR_INVERT_INPUT : METAL_SENSOR_INVERT_INPUT;
 }
 
 bool isClockAtZeroMinutes()
 {
+    // TODO: Create a more reliable way to read the sensor
     return digitalRead(METAL_SENSOR_MINUTE_PIN) ? !METAL_SENSOR_INVERT_INPUT : METAL_SENSOR_INVERT_INPUT;
 }
 
@@ -251,7 +253,7 @@ bool isClockAtZeroMinutes()
 //========== Clock Methods ===========//
 //====================================//
 
-int32_t getTargetClockTime()
+int32_t getRTCTime()
 {
     // Adjust RTC time to GPS time
     adjustRTCTimeToGPSTime();
@@ -265,7 +267,7 @@ int32_t getTargetClockTime()
         now.second();
 }
 
-void setClockToTargetClockTime()
+void setClockToZeroPosition()
 {
     // Set clock time to zero
     clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
@@ -277,74 +279,23 @@ void setClockToTargetClockTime()
     while (!(isClockAtZeroMinutes() && isClockAtZeroHours())) void;
 
     #ifdef SERIAL_DEBUG
-        Serial.println("[setClockToTargetClockTime] Clock reached initial position of 03:00");
+        Serial.println("[setClockToZeroPosition] Clock reached initial position of 03:00");
     #endif
+}
 
-    while (true)
+int32_t getTimeDifferenceBetween(int32_t upperTime, int32_t lowerTime)
+{
+    int32_t timeDifference = upperTime - lowerTime;
+
+    if (abs(timeDifference) > DEF_SECONDS_PER_CLOCK / 2)
     {
-        int32_t targetClockTimeFull = getTargetClockTime();
-        int32_t targetClockTimeMinutes = targetClockTimeFull % DEF_SECONDS_PER_HOUR;
-        int32_t targetClockTimeHours = targetClockTimeFull - targetClockTimeMinutes;
-
-        if (clockTime == targetClockTimeHours)
-        {
-            #ifdef SERIAL_DEBUG
-                Serial.print("[setClockToTargetClockTime] All hours added, remaining minutes to add: ");
-                Serial.println((float)targetClockTimeMinutes * 2 / DEF_SECONDS_PER_MINUTE);
-            #endif
-
-            int32_t clockTimeWhenFullySet = (targetClockTimeFull + targetClockTimeMinutes) % DEF_SECONDS_PER_CLOCK;
-
-            while (true)
-            {
-                // Get clock time difference between current and target clock time
-                int32_t clockTimeDifference = clockTimeWhenFullySet - getTargetClockTime();
-
-                // Adjust clock time difference if it is bigger than six hours
-                if (abs(clockTimeDifference) > DEF_SECONDS_PER_HOUR * 6)
-                {
-                    if (clockTimeDifference > 0)
-                        clockTimeDifference -= DEF_SECONDS_PER_CLOCK;
-                    else
-                        clockTimeDifference += DEF_SECONDS_PER_CLOCK;
-                }
-
-                if (clockTimeDifference <= 0)
-                    break;
-            }
-
-            // Set motor to start speed
-            setMotorSpeed(MOTOR_START_SPEED);
-
-            // Update clock time in case we waited longer than an hour
-            clockTime = clockTimeWhenFullySet / DEF_SECONDS_PER_HOUR;
-
-            #ifdef SERIAL_DEBUG
-                Serial.print("[setClockToTargetClockTime] Clock reached target clock time! Now running at normal speed. Current clock time: ");
-                Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
-            #endif
-
-            // Delay to make sure we passed zero minutes
-            if (targetClockTimeMinutes % 1800 < 300)
-                delay(600 * 1000); // 10 minutes
-
-            return;
-        }
-
-        // Delay to make sure we passed zero minutes
-        delay(300 * 1000); // 5 minutes
-
-        // Wait until we hit zero minutes
-        while (!isClockAtZeroMinutes()) void;
-
-        // Add one hour to clock time
-        clockTime = (clockTime + DEF_SECONDS_PER_HOUR) % DEF_SECONDS_PER_CLOCK;
-
-        #ifdef SERIAL_DEBUG
-            Serial.print("[setClockToTargetClockTime] Added one hour to clock time: ");
-            Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
-        #endif
+        if (timeDifference > 0)
+            timeDifference -= DEF_SECONDS_PER_CLOCK;
+        else
+            timeDifference += DEF_SECONDS_PER_CLOCK;
     }
+
+    return timeDifference;
 }
 
 void adjustClockSpeed()
@@ -363,56 +314,73 @@ void adjustClockSpeed()
             Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
         #endif
 
-        // Get clock time difference between current and target clock time
-        int32_t clockTimeDifference = clockTime - getTargetClockTime();
+        // Get time difference between clock time and RTC time
+        int32_t timeDifference = getTimeDifferenceBetween(clockTime, getRTCTime());
 
         #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Clock time difference in hours (raw): ");
-            Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
+            Serial.print("[adjustClockSpeed] Difference between clock time and RTC time in hours: ");
+            Serial.println((float)timeDifference / DEF_SECONDS_PER_HOUR);
         #endif
 
-        // Adjust clock time difference if it is bigger than six hours
-        if (abs(clockTimeDifference) > DEF_SECONDS_PER_HOUR * 6)
+        // Set motor speed depending on time difference
+        if (timeDifference > DEF_SECONDS_PER_HOUR / 2)
         {
-            if (clockTimeDifference > 0)
-                clockTimeDifference -= DEF_SECONDS_PER_CLOCK;
-            else
-                clockTimeDifference += DEF_SECONDS_PER_CLOCK;
+            // Case: the clock is further than half an hour in the future
+
+            // Stop the motor
+            setMotorSpeed(0);
+
+            #ifdef SERIAL_DEBUG
+                Serial.println("[adjustClockSpeed] Motor stopped, now waiting for RTC time to catch up...");
+            #endif
+
+            // Wait till RTC time caught up with clock time
+            while (getTimeDifferenceBetween(clockTime, getRTCTime()) > 0)
+                delay(1000);
+
+            // Set motor speed to start speed
+            setMotorSpeed(MOTOR_START_SPEED);
+
+            #ifdef SERIAL_DEBUG
+                Serial.println("[adjustClockSpeed] RTC time caught up with clock time! Running at start speed.");
+            #endif
         }
+        else if (timeDifference < -DEF_SECONDS_PER_HOUR / 2)
+        {
+            // Case: the clock is further than half an hour in the past
 
-        #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Clock time difference in hours (modulo)): ");
-            Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
-        #endif
+            // Set motor speed to double speed
+            setMotorSpeed(MOTOR_DOUBLE_SPEED);
 
-        // Clip clock time difference to half an hour min and max
-        if (clockTimeDifference > DEF_SECONDS_PER_HOUR / 2)
-            clockTimeDifference = DEF_SECONDS_PER_HOUR / 2;
+            #ifdef SERIAL_DEBUG
+                Serial.println("[adjustClockSpeed] Motor set to double speed.");
+            #endif
+        }
+        else
+        {
+            // Case: the clock is not more than half an hour off, past or future
 
-        if (clockTimeDifference < -DEF_SECONDS_PER_HOUR / 2)
-            clockTimeDifference = -DEF_SECONDS_PER_HOUR / 2;
+            // TODO: Check this calculation
+            // Calculate the clock speed
+            byte clockSpeed = (MOTOR_START_SPEED * 2 - MOTOR_DOUBLE_SPEED)
+                + (MOTOR_DOUBLE_SPEED - MOTOR_START_SPEED)
+                * DEF_SECONDS_PER_HOUR / (timeDifference + DEF_SECONDS_PER_HOUR);
 
-        #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Clock time difference in hours (clipped): ");
-            Serial.println((float)clockTimeDifference / DEF_SECONDS_PER_HOUR);
-        #endif
+            // Set motor speed to clock speed
+            setMotorSpeed(clockSpeed);
 
-        // Calculate the new clock speed
-        clockSpeed = (MOTOR_START_SPEED * 2 - MOTOR_DOUBLE_SPEED)
-            + (MOTOR_DOUBLE_SPEED - MOTOR_START_SPEED)
-            * DEF_SECONDS_PER_HOUR / (clockTimeDifference + DEF_SECONDS_PER_HOUR);
-
-        #ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Adjusted clock speed: ");
-            Serial.println(clockSpeed);
-            Serial.println();
-        #endif
-
-        // Set the motor speed to the clock speed
-        setMotorSpeed(clockSpeed);
+            #ifdef SERIAL_DEBUG
+                Serial.print("[adjustClockSpeed] Clock speed adjusted to: ");
+                Serial.println(clockSpeed);
+            #endif
+        }
 
         // Delay until we passed zero minutes
         delay(300 * 1000); // 5 minutes
+
+        #ifdef SERIAL_DEBUG
+            Serial.println();
+        #endif
     }
 }
 
@@ -445,12 +413,15 @@ void setup()
     pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
     pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
 
-    // Set clock to target clock time
-    setClockToTargetClockTime();
+    // Set clock to zero position
+    setClockToZeroPosition();
 }
 
 void loop()
 {
     // Just keep adjusting the clock speed
     adjustClockSpeed();
+
+    // Delay a little bit
+    delay(100); // 100 ms
 }
