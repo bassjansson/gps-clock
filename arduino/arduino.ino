@@ -328,7 +328,8 @@ void adjustClockSpeed()
         #endif
 
         // Get time difference between clock time and RTC time
-        int32_t timeDifference = getTimeDifferenceBetween(clockTime, getRTCTime());
+        int32_t rtcTime = getRTCTime();
+        int32_t timeDifference = getTimeDifferenceBetween(clockTime, rtcTime);
 
         #ifdef SERIAL_DEBUG
             Serial.print("[adjustClockSpeed] Difference between clock time and RTC time in hours: ");
@@ -401,10 +402,12 @@ void adjustClockSpeed()
         }
 
         // Delay until we passed zero minutes
-        delay(300 * 1000); // 5 minutes
+        int32_t waitTime = (rtcTime + 300) % DEF_SECONDS_PER_CLOCK; // 300 seconds = 5 minutes
+        while (getTimeDifferenceBetween(waitTime, getRTCTime()) > 0)
+            delay(100); // 100 ms
 
         #ifdef SERIAL_DEBUG
-            Serial.println();
+            Serial.println("[adjustClockSpeed] End of 5 minute delay.");
         #endif
     }
 
