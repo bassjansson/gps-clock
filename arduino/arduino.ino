@@ -5,12 +5,14 @@
 // Enable serial debug
 //#define SERIAL_DEBUG
 
-// Motor settings
+// Motor and clock settings
 #define MOTOR_DIRECTION HIGH // HIGH or LOW (OFFICAL)
 
-// Clock speed settings
-      int32_t nominalClockSpeed = 109; // 0 - 255 (OFFICAL)
-const int32_t  doubleClockSpeed = 202; // 0 - 255 (OFFICAL)
+#define NOMINAL_CLOCK_SPEED_MIN 99  // 0 - 255
+#define NOMINAL_CLOCK_SPEED_MAX 119 // 0 - 255
+
+      int32_t nominalClockSpeed = 109; // 0 - 255
+const int32_t  doubleClockSpeed = 202; // 0 - 255
 
 // Metal sensor settings
 #define METAL_SENSOR_HOUR_PIN   12 // Digital Pin 12 (OFFICAL)
@@ -376,8 +378,8 @@ void adjustClockSpeed()
             // We are now at 4:00 and we are 3 minutes ahead.
             // That means, that our nominal speed that we used to calculate the clock speed at 3:00, is wrong.
             // So, before we calculate the clock speed to get from 4:00 to five, we want a better nominal speed.
-            if (timeDifference > 30) nominalClockSpeed--;
-            if (timeDifference < 30) nominalClockSpeed++;
+            if (timeDifference > 30 && nominalClockSpeed > NOMINAL_CLOCK_SPEED_MIN) nominalClockSpeed--;
+            if (timeDifference < 30 && nominalClockSpeed < NOMINAL_CLOCK_SPEED_MAX) nominalClockSpeed++;
 
             #ifdef SERIAL_DEBUG
                 Serial.print("[adjustClockSpeed] Nominal clock speed adjusted to: ");
