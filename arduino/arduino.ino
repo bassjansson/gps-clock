@@ -8,11 +8,11 @@
 // Motor and clock settings
 #define MOTOR_DIRECTION HIGH // HIGH or LOW (OFFICAL)
 
-#define NOMINAL_CLOCK_SPEED_MIN 99  // 0 - 255
-#define NOMINAL_CLOCK_SPEED_MAX 119 // 0 - 255
+#define NOMINAL_CLOCK_SPEED_MIN 98  // 0 - 255 (OFFICAL)
+#define NOMINAL_CLOCK_SPEED_MAX 118 // 0 - 255 (OFFICAL)
 
-      int32_t nominalClockSpeed = 109; // 0 - 255
-const int32_t  doubleClockSpeed = 202; // 0 - 255
+      int32_t nominalClockSpeed = 108; // 0 - 255 (OFFICAL)
+const int32_t  doubleClockSpeed = 202; // 0 - 255 (OFFICAL)
 
 // Metal sensor settings
 #define METAL_SENSOR_HOUR_PIN   12 // Digital Pin 12 (OFFICAL)
