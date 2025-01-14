@@ -7,12 +7,13 @@
 #define MOTOR_RPM         8.5 // RPM after gear
 #define MOTOR_DIRECTION   LOW // HIGH = forward, LOW = backward
 
-#define MOTOR_ACCEL       1000. // steps per seconds-squared
-#define MOTOR_DECEL       1000. // steps per seconds-squared
+#define MOTOR_ACCEL       1000 // steps per seconds-squared
+#define MOTOR_DECEL       1000 // steps per seconds-squared
 
 #define MOTOR_PUL_PIN     9
 #define MOTOR_DIR_PIN     8
 
+#define MIN_MOTOR_SPEED   10 // Steps per second
 #define MIN_YIELD_MICROS  50 // Don't call yield if we have a wait shorter than this
 #define PULSE_DUR_MICROS  20 // Pulse HIGH/LOW duration
 
@@ -50,9 +51,7 @@ void loop()
 {
     double steps_per_min = (double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_GEAR_RATIO * MOTOR_RPM; // 68000 steps per minute
     double steps_per_sec = steps_per_min / 60.;                                                    // 1133.33 steps per second
-    double motor_speed   = sqrt((double)MOTOR_ACCEL);                                              // steps per second
-    if (motor_speed < 1.)
-        motor_speed = 1.;
+    double motor_speed   = MIN_MOTOR_SPEED;                                                        // steps per second
 
     // Accelerate
     while (motor_speed < steps_per_sec)
@@ -69,7 +68,7 @@ void loop()
             delayMicros(step_end_time - PULSE_DUR_MICROS * 2);
 
         // Calculate new motor speed
-        motor_speed += MOTOR_ACCEL / motor_speed;
+        motor_speed += (double)MOTOR_ACCEL / motor_speed;
         if (motor_speed > steps_per_sec)
             motor_speed = steps_per_sec;
     }
@@ -94,7 +93,7 @@ void loop()
     }
 
     // Decelerate
-    while (motor_speed > 1.)
+    while (motor_speed > MIN_MOTOR_SPEED)
     {
         // Pulse
         digitalWrite(MOTOR_PUL_PIN, HIGH);
@@ -103,9 +102,9 @@ void loop()
         delayMicros(PULSE_DUR_MICROS);
 
         // Calculate new motor speed
-        motor_speed -= MOTOR_DECEL / motor_speed;
-        if (motor_speed < 1.)
-            motor_speed = 1.;
+        motor_speed -= (double)MOTOR_DECEL / motor_speed;
+        if (motor_speed < MIN_MOTOR_SPEED)
+            motor_speed = MIN_MOTOR_SPEED;
 
         // Wait for end of step
         unsigned long step_end_time = (unsigned long)(1000000. / motor_speed + 0.5);
