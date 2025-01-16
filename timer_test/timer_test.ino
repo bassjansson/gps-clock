@@ -6,6 +6,7 @@
 
 #define MOTOR_RPM         8.5 // RPM after gear
 #define MOTOR_DIRECTION   LOW // HIGH = forward, LOW = backward
+#define MOTOR_PWM_DUTY    512 // 50% duty cycle
 
 #define MOTOR_ACCEL       1500      // steps per seconds-squared
 #define MOTOR_DECEL       1500      // steps per seconds-squared
@@ -30,7 +31,7 @@ void setup()
     digitalWrite(MOTOR_DIR_PIN, MOTOR_DIRECTION);
 
     Timer1.initialize(MOTOR_MIN_SPEED);
-    Timer1.pwm(MOTOR_PUL_PIN, 512); // 50% duty
+    Timer1.pwm(MOTOR_PUL_PIN, MOTOR_PWM_DUTY); // 50% duty
     Timer1.attachInterrupt(stepCounter);
     Timer1.stop();
 
@@ -57,6 +58,7 @@ void loop()
     step_count = 0;
     interrupts();
     Timer1.setPeriod(step_period);
+    Timer1.setPwmDuty(MOTOR_PUL_PIN, MOTOR_PWM_DUTY);
 
     // Wait till counter reached 1 minute
     while (true)
