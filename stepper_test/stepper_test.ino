@@ -1,24 +1,24 @@
 #include <Arduino.h>
 
-#define MOTOR_STEPS       200 // Steps per revolution
+#define MOTOR_STEPS       200 // Full steps per revolution
 #define MOTOR_MICRO_STEPS 2   // Microsteps
 #define MOTOR_GEAR_RATIO  20  // Gear ratio
 
 #define MOTOR_RPM         8.5 // RPM after gear
 #define MOTOR_DIRECTION   LOW // HIGH = forward, LOW = backward
 
-#define MOTOR_ACCEL       1000 // steps per seconds-squared
-#define MOTOR_DECEL       1000 // steps per seconds-squared
+#define MOTOR_ACCEL       1500 // steps per seconds-squared
+#define MOTOR_DECEL       1500 // steps per seconds-squared
 
 #define MOTOR_PUL_PIN     9
 #define MOTOR_DIR_PIN     8
 
-#define MIN_MOTOR_SPEED   10 // Steps per second
+#define MIN_MOTOR_SPEED   10 // Minimum steps per second
 #define MIN_YIELD_MICROS  50 // Don't call yield if we have a wait shorter than this
 #define PULSE_DUR_MICROS  20 // Pulse HIGH/LOW duration
 
 // Test time in seconds
-#define TEST_TIME_SEC     10
+#define TEST_TIME_SEC     60
 
 static inline void delayMicros(unsigned long delay_us, unsigned long start_us = 0)
 {
