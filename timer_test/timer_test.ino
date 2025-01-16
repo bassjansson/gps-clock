@@ -7,8 +7,8 @@
 #define MOTOR_RPM         8.5 // RPM after gear
 #define MOTOR_DIRECTION   LOW // HIGH = forward, LOW = backward
 
-#define MOTOR_ACCEL       1500 // steps per seconds-squared
-#define MOTOR_DECEL       1500 // steps per seconds-squared
+#define MOTOR_ACCEL       1500      // steps per seconds-squared
+#define MOTOR_DECEL       1500      // steps per seconds-squared
 #define MOTOR_MIN_SPEED   1000000UL // Minimum step time in micro seconds
 
 #define MOTOR_DIR_PIN     8
@@ -18,6 +18,7 @@
 #define TEST_TIME_SEC     60
 
 volatile unsigned long step_count = 0; // use volatile for shared variables
+
 void stepCounter()
 {
     step_count++;
@@ -38,9 +39,9 @@ void setup()
 
 void loop()
 {
-    // Delay 3 seconds
+    // Delay 5 seconds
     Serial.println("Loop start.");
-    delay(3000);
+    delay(5000);
 
     // Calculate step period
     double steps_per_min = (double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_GEAR_RATIO * MOTOR_RPM; // 68000 steps per minute
@@ -50,7 +51,7 @@ void loop()
     Serial.println("Starting timer..");
     static unsigned long time_diff;
     static unsigned long step_count_copy;
-    time_diff = micros();
+    time_diff       = micros();
     step_count_copy = 0;
     noInterrupts();
     step_count = 0;
@@ -58,12 +59,14 @@ void loop()
     Timer1.setPeriod(step_period);
 
     // Wait till counter reached 1 minute
-    while (true) {
+    while (true)
+    {
         noInterrupts();
         step_count_copy = step_count;
         interrupts();
         if (step_count_copy >= (unsigned long)(steps_per_min / 60. * TEST_TIME_SEC))
             break;
+        delay(1);
     }
 
     // Stop timer
@@ -73,7 +76,4 @@ void loop()
     Serial.println(step_count_copy);
     Serial.print("Time difference: ");
     Serial.println(time_diff);
-
-    // Delay 3 seconds
-    delay(3000);
 }
