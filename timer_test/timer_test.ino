@@ -1,61 +1,79 @@
 #include <TimerOne.h>
 
-void setup(void)
+#define MOTOR_STEPS       200 // Full steps per revolution
+#define MOTOR_MICRO_STEPS 2   // Microsteps
+#define MOTOR_GEAR_RATIO  20  // Gear ratio
+
+#define MOTOR_RPM         8.5 // RPM after gear
+#define MOTOR_DIRECTION   LOW // HIGH = forward, LOW = backward
+
+#define MOTOR_ACCEL       1500 // steps per seconds-squared
+#define MOTOR_DECEL       1500 // steps per seconds-squared
+#define MOTOR_MIN_SPEED   1000000UL // Minimum step time in micro seconds
+
+#define MOTOR_DIR_PIN     8
+#define MOTOR_PUL_PIN     9
+
+// Test time in seconds
+#define TEST_TIME_SEC     60
+
+volatile unsigned long step_count = 0; // use volatile for shared variables
+void stepCounter()
 {
-    Timer1.initialize(13700);
-    Timer1.attachInterrupt(blinkLED); // blinkLED to run every 0.15 seconds
+    step_count++;
+}
+
+void setup()
+{
+    pinMode(MOTOR_DIR_PIN, OUTPUT);
+    digitalWrite(MOTOR_DIR_PIN, MOTOR_DIRECTION);
+
+    Timer1.initialize(MOTOR_MIN_SPEED);
+    Timer1.pwm(MOTOR_PUL_PIN, 512); // 50% duty
+    Timer1.attachInterrupt(stepCounter);
+    Timer1.stop();
+
     Serial.begin(9600);
 }
 
-volatile unsigned long period_time = 0; // use volatile for shared variables
-volatile bool period_time_changed = 0; // use volatile for shared variables
-
-void blinkLED(void)
+void loop()
 {
-    static unsigned long curr_micros = micros();
-    static unsigned long prev_micros = micros();
+    // Delay 3 seconds
+    Serial.println("Loop start.");
+    delay(3000);
 
-    curr_micros = micros();
+    // Calculate step period
+    double steps_per_min = (double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_GEAR_RATIO * MOTOR_RPM; // 68000 steps per minute
+    unsigned long step_period = (unsigned long)(60000000. / steps_per_min + 0.5);
 
-    period_time = curr_micros - prev_micros;
-    period_time_changed = 1;
-
-    prev_micros = curr_micros;
-}
-
-// The main program will print the blink count
-// to the Arduino Serial Monitor
-void loop(void)
-{
-    static unsigned long period_time_copy = 0; // holds a copy
-    static unsigned long prev_period_copy = 0;
-
-    // to read a variable which the interrupt code writes, we
-    // must temporarily disable interrupts, to be sure it will
-    // not change while we are reading.  To minimize the time
-    // with interrupts off, just quickly make a copy, and then
-    // use the copy while allowing the interrupt to keep working.
+    // Start timer
+    Serial.println("Starting timer..");
+    static unsigned long time_diff;
+    static unsigned long step_count_copy;
+    time_diff = micros();
+    step_count_copy = 0;
     noInterrupts();
-    if (period_time_changed) {
-        period_time_changed = 0;
-        period_time_copy = period_time;
-        prev_period_copy = 0;
-    }
+    step_count = 0;
     interrupts();
+    Timer1.setPeriod(step_period);
 
-    if (period_time_copy != prev_period_copy) {
-        Serial.println(period_time_copy / 10000.);
-        prev_period_copy = period_time_copy;
+    // Wait till counter reached 1 minute
+    while (true) {
+        noInterrupts();
+        step_count_copy = step_count;
+        interrupts();
+        if (step_count_copy >= (unsigned long)(steps_per_min / 60. * TEST_TIME_SEC))
+            break;
     }
 
-    // Every five seconds change frequency
-    static unsigned long prev_change_time = millis();
-    static bool on_off = 0;
-    if (millis() - prev_change_time > 5000) {
-        prev_change_time = millis();
-        Timer1.setPeriod(13700 + 3670 * on_off);
-        on_off = !on_off;
-    }
+    // Stop timer
+    Timer1.stop();
+    time_diff = micros() - time_diff;
+    Serial.print("Stopped timer, step count: ");
+    Serial.println(step_count_copy);
+    Serial.print("Time difference: ");
+    Serial.println(time_diff);
 
-    delay(1);
+    // Delay 3 seconds
+    delay(3000);
 }
