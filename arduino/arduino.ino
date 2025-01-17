@@ -1,3 +1,10 @@
+/*
+Library mods:
+- Uncomment line 148 in NeoGPS/src/NMEAGPS_cfg.h
+- Comment line 38, 40, 41, 43, 44 in NeoGPS/src/GPSfix_cfg.h
+- Comment line 31 in RTClib/src/RTClib.h
+*/
+
 //==================================//
 //========== User Defines ==========//
 //==================================//
@@ -97,11 +104,13 @@ static int32_t clockTime = 0; // seconds
 static void adjustTime(NeoGPS::time_t &dt)
 {
     // Convert date/time structure to seconds
-    NeoGPS::clock_t seconds = dt;
+    static NeoGPS::clock_t seconds;
+    seconds = (NeoGPS::clock_t)dt;
 
     // Calculate DST changeover times once per reset and year
-    static NeoGPS::time_t changeover;
-    static NeoGPS::clock_t springForward, fallBack;
+    static NeoGPS::time_t changeover(0);
+    static NeoGPS::clock_t springForward = 0;
+    static NeoGPS::clock_t fallBack = 0;
 
     if ((springForward == 0) || (changeover.year != dt.year))
     {
@@ -111,9 +120,9 @@ static void adjustTime(NeoGPS::time_t &dt)
         changeover.seconds = 0;
 
         // Calculate the spring changeover time (seconds)
-        changeover.month = EU_DST.springMonth;
-        changeover.date  = EU_DST.springDate;
-        changeover.hours = EU_DST.springHour;
+        changeover.month = EU_DST.springMonth; // March
+        changeover.date  = EU_DST.springDate; // 31
+        changeover.hours = EU_DST.springHour; // 2AM
         changeover.set_day();
 
         // Step back to a Sunday, if day != SUNDAY
@@ -121,9 +130,9 @@ static void adjustTime(NeoGPS::time_t &dt)
         springForward = (NeoGPS::clock_t)changeover;
 
         // Calculate the fall changeover time (seconds)
-        changeover.month = EU_DST.fallMonth;
-        changeover.date  = EU_DST.fallDate;
-        changeover.hours = EU_DST.fallHour - 1; // To account for the apparent DST+1
+        changeover.month = EU_DST.fallMonth; // October
+        changeover.date  = EU_DST.fallDate; // 31
+        changeover.hours = EU_DST.fallHour; // 2AM
         changeover.set_day();
 
         // Step back to a Sunday, if day != SUNDAY
@@ -132,11 +141,11 @@ static void adjustTime(NeoGPS::time_t &dt)
     }
 
     // First offset from UTC to the local time zone
-    seconds += TIME_ZONE * NeoGPS::SECONDS_PER_HOUR;
+    seconds += (NeoGPS::clock_t)TIME_ZONE * NeoGPS::SECONDS_PER_HOUR;
 
     // Then add an hour if DST is in effect
-    if ((springForward <= seconds) && (seconds < fallBack))
-        seconds += NeoGPS::SECONDS_PER_HOUR;
+    if ((seconds >= springForward) && (seconds < fallBack))
+        seconds += (NeoGPS::clock_t)NeoGPS::SECONDS_PER_HOUR;
 
     // Convert seconds back to a date/time structure
     dt = seconds;
