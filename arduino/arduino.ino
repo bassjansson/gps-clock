@@ -1,9 +1,19 @@
 /*
-Library mods:
-- Uncomment line 148 in NeoGPS/src/NMEAGPS_cfg.h
-- Comment line 38, 40, 41, 43, 44 in NeoGPS/src/GPSfix_cfg.h
-- Comment line 31 in RTClib/src/RTClib.h
-*/
+ * Libraries:
+ * - RTClib      (2.1.4)
+ * - NeoGPS      (4.2.9)
+ * - NeoSWSerial (3.0.5)
+ * - TimerOne    (1.1.1)
+ *
+ * Library mods:
+ * - Comment line 31 in RTClib/src/RTClib.h (SECONDS_PER_DAY)
+ * - Copy and overwrite both config files to NeoGPS/src/
+ *
+ * NeoGPS notes:
+ * - Only RMC is needed for Date+Time
+ * - NMEAGPS_EXPLICIT_MERGING is used
+ * - NMEAGPS_RECOGNIZE_ALL needs to be off
+ */
 
 //==================================//
 //========== User Defines ==========//
