@@ -73,8 +73,8 @@ static const int32_t DEF_SECONDS_PER_CLOCK  = 43200;
 #error You must define NMEAGPS_PARSE_RMC or NMEAGPS_PARSE_ZDA in NMEAGPS_cfg.h!
 #endif
 
-#if !defined(NMEAGPS_INTERRUPT_PROCESSING)
-#error You must define NMEAGPS_INTERRUPT_PROCESSING in NMEAGPS_cfg.h!
+#if defined(NMEAGPS_INTERRUPT_PROCESSING)
+#error You must *undefine* NMEAGPS_INTERRUPT_PROCESSING in NMEAGPS_cfg.h!
 #endif
 
 
@@ -155,12 +155,13 @@ static void adjustTime(NeoGPS::time_t &dt)
 // and adjusts the RTC time to the GPS time
 static void adjustRTCTimeToGPSTime()
 {
+    gpsParser.reset();
     unsigned long start = millis();
 
-    // Read GPS for a maximum of one second
-    while (millis() - start < 1000)
+    // Read GPS for a maximum of two seconds
+    while (millis() - start < 2000)
     {
-        if (gpsParser.available())
+        if (gpsParser.available(gpsPort))
         {
             gpsFix = gpsParser.read();
 
@@ -199,12 +200,6 @@ static void adjustRTCTimeToGPSTime()
             }
         }
     }
-}
-
-// Handler to enable GPS interrupt processing
-static void gpsParserInterruptHandler(uint8_t c)
-{
-    gpsParser.handle(c);
 }
 
 
@@ -413,7 +408,6 @@ void setup()
     #endif
 
     // Begin GPS serial communication
-    gpsPort.attachInterrupt(gpsParserInterruptHandler);
     gpsPort.begin(9600);
 
     // Begin RTC I2C communication
