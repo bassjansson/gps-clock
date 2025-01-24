@@ -20,7 +20,7 @@
 //==================================//
 
 // Enable serial debug
-//#define SERIAL_DEBUG
+#define SERIAL_DEBUG
 
 // Motor and clock settings
 #define MOTOR_DIRECTION         HIGH // HIGH or LOW (OFFICAL)
@@ -56,7 +56,7 @@ static const struct
 } EU_DST;
 
 // Time constants
-typedef int32_t        clock12_t;
+typedef uint32_t       clock12_t;
 static const clock12_t DEF_SECONDS_PER_MINUTE = 60;
 static const clock12_t DEF_SECONDS_PER_HOUR   = 60 * DEF_SECONDS_PER_MINUTE;
 static const clock12_t DEF_SECONDS_PER_CLOCK  = 12 * DEF_SECONDS_PER_HOUR;
@@ -104,7 +104,7 @@ static NeoSWSerial gpsPort(GPS_PORT_RX_PIN, GPS_PORT_TX_PIN);
 static RTC_DS1307 rtc;
 
 // Clock time
-static int32_t clockTime = 0; // seconds
+static clock12_t clockTime = 0; // seconds
 
 //======================================//
 //========== GPS/RTC Methods ===========//
@@ -225,8 +225,8 @@ static clock12_t getAdjustedRTCTime()
 #endif
 
     // Convert date/time to 12 hour clock time in seconds
-    return (clock12_t)(dt.hours() % 12) * DEF_SECONDS_PER_HOUR + (clock12_t)(dt.minutes()) * DEF_SECONDS_PER_MINUTE
-         + (clock12_t)(dt.seconds());
+    return (clock12_t)(dt.hours % 12) * DEF_SECONDS_PER_HOUR + (clock12_t)dt.minutes * DEF_SECONDS_PER_MINUTE
+         + (clock12_t)dt.seconds;
 }
 
 //====================================//
@@ -262,6 +262,49 @@ bool isClockAtZeroMinutes()
     }
 
     return false;
+}
+
+//====================================//
+//============= EEPROM ===============//
+//====================================//
+
+#include <EEPROM.h>
+
+static uint16_t EEPROM_pos = 0;
+
+void readClockTimeFromEEPROM(clock12_t& clock_time)
+{
+    int t1;
+
+    uint16_t size   = sizeof(t1);
+    uint16_t length = EEPROM.length() / size;
+
+    for (uint16_t i = 0; i < length; i++)
+    {
+        EEPROM.get(i * size, t1);
+
+        if (t1 >= 0)
+        {
+            clock_time = ((clock12_t)t1 * DEF_SECONDS_PER_MINUTE) % DEF_SECONDS_PER_CLOCK;
+            EEPROM_pos = i;
+            return;
+        }
+    }
+
+    clock_time = 0;
+    EEPROM_pos = 0;
+}
+
+void writeClockTimeToEEPROM(const clock12_t& clock_time)
+{
+    int t1 = (clockTime % DEF_SECONDS_PER_CLOCK) / DEF_SECONDS_PER_MINUTE;
+
+    uint16_t size   = sizeof(t1);
+    uint16_t length = EEPROM.length() / size;
+
+    EEPROM.put(EEPROM_pos * size, -1);
+    EEPROM_pos = (EEPROM_pos + 1) % length;
+    EEPROM.put(EEPROM_pos * size, t1);
 }
 
 //====================================//
@@ -416,8 +459,8 @@ void adjustClockSpeed()
 
 void setup()
 {
-// Begin debug serial communication
 #ifdef SERIAL_DEBUG
+    // Begin debug serial communication
     Serial.begin(9600);
     while (!Serial)
         void;
@@ -425,21 +468,37 @@ void setup()
 #endif
 
     // Begin GPS serial communication
-    gpsPort.begin(9600);
+    // gpsPort.begin(9600);
 
     // Begin RTC I2C communication
-    rtc.begin();
+    // rtc.begin();
 
     // Setup metal sensor pins
-    pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
-    pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
+    // pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
+    // pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
 
     // Set clock to zero position
-    setClockToZeroPosition();
+    // setClockToZeroPosition();
+
+    readClockTimeFromEEPROM(clockTime);
 }
 
 void loop()
 {
     // Just keep adjusting the clock speed
-    adjustClockSpeed();
+    // adjustClockSpeed();
+
+    unsigned long start_time = millis();
+
+    clockTime = (clockTime + DEF_SECONDS_PER_MINUTE) % DEF_SECONDS_PER_CLOCK;
+
+    //writeClockTimeToEEPROM(clockTime);
+
+    Serial.print("Current clock time: ");
+    Serial.print(clockTime);
+    Serial.print(" and EEPROM pos: ");
+    Serial.println(EEPROM_pos);
+
+    while (millis() - start_time < 1000)
+        delay(1);
 }
