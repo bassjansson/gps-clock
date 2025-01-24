@@ -244,24 +244,32 @@ void setMotorSpeed(byte speed)
 
 bool isClockAtZeroHours()
 {
+    if (digitalRead(METAL_SENSOR_HOUR_PIN))
+        return false;
+
+    delay(250);
+
+    if (digitalRead(METAL_SENSOR_HOUR_PIN))
+        return false;
+
+    delay(250);
+
     return !digitalRead(METAL_SENSOR_HOUR_PIN);
 }
 
 bool isClockAtZeroMinutes()
 {
-    if (!digitalRead(METAL_SENSOR_MINUTE_PIN))
-    {
-        delay(500); // 500 ms
+    if (digitalRead(METAL_SENSOR_MINUTE_PIN))
+        return false;
 
-        if (!digitalRead(METAL_SENSOR_MINUTE_PIN))
-        {
-            delay(500); // 500 ms
+    delay(250);
 
-            return !digitalRead(METAL_SENSOR_MINUTE_PIN);
-        }
-    }
+    if (digitalRead(METAL_SENSOR_MINUTE_PIN))
+        return false;
 
-    return false;
+    delay(250);
+
+    return !digitalRead(METAL_SENSOR_MINUTE_PIN);
 }
 
 //====================================//
@@ -492,7 +500,7 @@ void loop()
 
     clockTime = (clockTime + DEF_SECONDS_PER_MINUTE) % DEF_SECONDS_PER_CLOCK;
 
-    //writeClockTimeToEEPROM(clockTime);
+    // writeClockTimeToEEPROM(clockTime);
 
     Serial.print("Current clock time: ");
     Serial.print(clockTime);
