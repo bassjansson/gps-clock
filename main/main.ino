@@ -56,9 +56,10 @@ static const struct
 } EU_DST;
 
 // Time constants
-static const int32_t DEF_SECONDS_PER_MINUTE = 60;
-static const int32_t DEF_SECONDS_PER_HOUR   = 3600;
-static const int32_t DEF_SECONDS_PER_CLOCK  = 43200;
+typedef int32_t        clock12_t;
+static const clock12_t DEF_SECONDS_PER_MINUTE = 60;
+static const clock12_t DEF_SECONDS_PER_HOUR   = 60 * DEF_SECONDS_PER_MINUTE;
+static const clock12_t DEF_SECONDS_PER_CLOCK  = 12 * DEF_SECONDS_PER_HOUR;
 
 
 //==============================//
@@ -109,12 +110,51 @@ static int32_t clockTime = 0; // seconds
 //========== GPS/RTC Methods ===========//
 //======================================//
 
-// Adjusts date/time to local time zone with DST
-static void adjustTime(NeoGPS::time_t& dt)
+static NeoGPS::clock_t getGPSTime()
 {
-    // Convert date/time structure to seconds
-    static NeoGPS::clock_t seconds;
-    seconds = (NeoGPS::clock_t)dt;
+    // Reset GPS parser
+    gpsParser.reset();
+
+    // Read GPS for a maximum of two seconds
+    unsigned long start_time = millis();
+
+    while (millis() - start_time < 2000)
+    {
+        if (gpsParser.available(gpsPort))
+        {
+            gpsFix = gpsParser.read();
+
+            if (gpsFix.valid.time && gpsFix.valid.date)
+            {
+#ifdef SERIAL_DEBUG
+                // Print GPS time
+                Serial.print("[getGPSTime] Current GPS Time: ");
+                Serial << gpsFix.dateTime;
+                Serial.println();
+#endif
+
+                // Return GPS time
+                return (NeoGPS::clock_t)gpsFix.dateTime;
+            }
+        }
+    }
+
+#ifdef SERIAL_DEBUG
+    // GPS read failed
+    Serial.println("[getGPSTime] Failed to read GPS time..");
+#endif
+
+    // Return 0 when GPS read failed
+    return 0;
+}
+
+// Adjusts date/time to local time zone with DST
+static void adjustTimeToLocalDST(NeoGPS::clock_t& seconds)
+{
+    // Convert seconds to date/time struct
+    static NeoGPS::time_t dt;
+    dt.init();
+    dt += seconds;
 
     // Calculate DST changeover times once per reset and year
     static NeoGPS::time_t  changeover(0);
@@ -155,61 +195,38 @@ static void adjustTime(NeoGPS::time_t& dt)
     // Then add an hour if DST is in effect
     if ((seconds >= springForward) && (seconds < fallBack))
         seconds += (NeoGPS::clock_t)NeoGPS::SECONDS_PER_HOUR;
-
-    // Convert seconds back to a date/time structure
-    dt = seconds;
 }
 
-// Reads GPS time from the GPS serial port
-// and adjusts the RTC time to the GPS time
-static void adjustRTCTimeToGPSTime()
+static clock12_t getAdjustedRTCTime()
 {
-    gpsParser.reset();
-    unsigned long start = millis();
+    // First try to get GPS time
+    NeoGPS::clock_t gpsTime = getGPSTime(); // Seconds since 2000
 
-    // Read GPS for a maximum of two seconds
-    while (millis() - start < 2000)
-    {
-        if (gpsParser.available(gpsPort))
-        {
-            gpsFix = gpsParser.read();
+    // Adjust RTC time to GPS time if GPS reading succeeded
+    if (gpsTime != 0)
+        rtc.adjust(DateTime(gpsTime + SECONDS_FROM_1970_TO_2000));
 
-            if (gpsFix.valid.time && gpsFix.valid.date)
-            {
-                // TODO: this needs to happen outside of this loop
-                // Adjust GPS date/time to local time zone with DST
-                adjustTime(gpsFix.dateTime);
+    // Get RTC time in seconds
+    NeoGPS::clock_t rtcTime = rtc.now().secondstime(); // Seconds since 2000
 
-                // Adjust RTC date/time to GPS date/time
-                rtc.adjust(DateTime((NeoGPS::clock_t)gpsFix.dateTime + SECONDS_FROM_1970_TO_2000));
+    // Adjust RTC time to local time with DST
+    adjustTimeToLocalDST(rtcTime);
 
-// Print GPS and RTC date/time
+    // Convert seconds to date/time struct
+    static NeoGPS::time_t dt;
+    dt.init();
+    dt += rtcTime;
+
 #ifdef SERIAL_DEBUG
-                Serial.print("[adjustRTCTimeToGPSTime] Read GPS Time: ");
-                Serial << gpsFix.dateTime;
-                Serial.println();
-
-                DateTime now = rtc.now();
-                Serial.print("[adjustRTCTimeToGPSTime] Adjusted RTC Time: ");
-                Serial.print(now.year(), DEC);
-                Serial.print('-');
-                Serial.print(now.month(), DEC);
-                Serial.print('-');
-                Serial.print(now.day(), DEC);
-                Serial.print(' ');
-                Serial.print(now.hour(), DEC);
-                Serial.print(':');
-                Serial.print(now.minute(), DEC);
-                Serial.print(':');
-                Serial.print(now.second(), DEC);
-                Serial.println();
+    // Print adjusted RTC time
+    Serial.print("[getAdjustedRTCTime] Adjusted RTC Time: ");
+    Serial << dt;
+    Serial.println();
 #endif
 
-                // Break out of read loop
-                break;
-            }
-        }
-    }
+    // Convert date/time to 12 hour clock time in seconds
+    return (clock12_t)(dt.hours() % 12) * DEF_SECONDS_PER_HOUR + (clock12_t)(dt.minutes()) * DEF_SECONDS_PER_MINUTE
+         + (clock12_t)(dt.seconds());
 }
 
 //====================================//
@@ -253,14 +270,7 @@ bool isClockAtZeroMinutes()
 
 int32_t getRTCTime()
 {
-    // Adjust RTC time to GPS time
-    adjustRTCTimeToGPSTime();
-
-    // Get current RTC date/time
-    DateTime now = rtc.now();
-
-    // Convert date/time to clock time in seconds
-    return (now.hour() % 12) * DEF_SECONDS_PER_HOUR + now.minute() * DEF_SECONDS_PER_MINUTE + now.second();
+    return getAdjustedRTCTime();
 }
 
 void setClockToZeroPosition()
