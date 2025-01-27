@@ -242,34 +242,50 @@ void setMotorSpeed(byte speed)
 //========== Metal Sensor Methods ===========//
 //===========================================//
 
+#define METAL_SENSOR_CHECK_COUNT 3
+#define METAL_SENSOR_CHECK_DELAY 100 // ms
+
+// Blocking
 bool isClockAtZeroHours()
 {
-    if (digitalRead(METAL_SENSOR_HOUR_PIN))
-        return false;
+    int count = 0;
 
-    delay(250);
+    for (int i = 1; i < METAL_SENSOR_CHECK_COUNT; i++)
+    {
+        count += !digitalRead(METAL_SENSOR_HOUR_PIN);
+        delay(METAL_SENSOR_CHECK_DELAY);
+    }
 
-    if (digitalRead(METAL_SENSOR_HOUR_PIN))
-        return false;
+    count += !digitalRead(METAL_SENSOR_HOUR_PIN);
 
-    delay(250);
-
-    return !digitalRead(METAL_SENSOR_HOUR_PIN);
+    return count >= (METAL_SENSOR_CHECK_COUNT / 2 + 1);
 }
 
+// Non-blocking
 bool isClockAtZeroMinutes()
 {
-    if (digitalRead(METAL_SENSOR_MINUTE_PIN))
-        return false;
+    static unsigned long start = millis();
+    static int           count = 0;
+    static bool          state = false;
 
-    delay(250);
+    if (millis() - start >= METAL_SENSOR_CHECK_DELAY)
+    {
+        start = millis();
 
-    if (digitalRead(METAL_SENSOR_MINUTE_PIN))
-        return false;
+        if (!digitalRead(METAL_SENSOR_MINUTE_PIN) != state)
+            count++;
+        else if (count > 0)
+            count--;
 
-    delay(250);
+        if (count >= METAL_SENSOR_CHECK_COUNT)
+        {
+            count = 0;
+            state = !state;
+            return state;
+        }
+    }
 
-    return !digitalRead(METAL_SENSOR_MINUTE_PIN);
+    return false;
 }
 
 //====================================//
