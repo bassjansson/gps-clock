@@ -218,8 +218,8 @@ void setMotorSpeed(byte speed)
 //========== Metal Sensor Methods ===========//
 //===========================================//
 
-#define METAL_SENSOR_CHECK_COUNT 3
-#define METAL_SENSOR_CHECK_DELAY 100 // ms
+#define METAL_SENSOR_CHECK_COUNT 4
+#define METAL_SENSOR_CHECK_DELAY 100
 
 // Blocking
 bool isClockAtZeroHours()
@@ -272,7 +272,7 @@ bool isClockAtZeroMinutes()
 
 static uint16_t EEPROM_pos = 0;
 
-void readClockTimeFromEEPROM(clock12_t& clock_time)
+static void readClockTimeFromEEPROM(clock12_t& clock_time, clock12_t resolution)
 {
     int t1;
 
@@ -285,7 +285,7 @@ void readClockTimeFromEEPROM(clock12_t& clock_time)
 
         if (t1 >= 0)
         {
-            clock_time = ((clock12_t)t1 * DEF_SECONDS_PER_MINUTE) % DEF_SECONDS_PER_CLOCK;
+            clock_time = ((clock12_t)t1 * resolution) % DEF_SECONDS_PER_CLOCK;
             EEPROM_pos = i;
             return;
         }
@@ -295,9 +295,14 @@ void readClockTimeFromEEPROM(clock12_t& clock_time)
     EEPROM_pos = 0;
 }
 
-void writeClockTimeToEEPROM(const clock12_t& clock_time)
+static void writeClockTimeToEEPROM(const clock12_t& clock_time, clock12_t resolution)
 {
-    int t1 = (clockTime % DEF_SECONDS_PER_CLOCK) / DEF_SECONDS_PER_MINUTE;
+    int t1 = (clock_time % DEF_SECONDS_PER_CLOCK) / resolution;
+
+    static int prev_t1 = -1;
+    if (t1 == prev_t1)
+        return;
+    prev_t1 = t1;
 
     uint16_t size   = sizeof(t1);
     uint16_t length = EEPROM.length() / size;
