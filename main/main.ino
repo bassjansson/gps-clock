@@ -110,42 +110,25 @@ static clock12_t clockTime = 0; // seconds
 //========== GPS/RTC Methods ===========//
 //======================================//
 
-static NeoGPS::clock_t getGPSTime()
+static void readGPSAndUpdateRTC()
 {
-    // Reset GPS parser
-    gpsParser.reset();
-
-    // Read GPS for a maximum of two seconds
-    unsigned long start_time = millis();
-
-    while (millis() - start_time < 2000)
+    if (gpsParser.available(gpsPort))
     {
-        if (gpsParser.available(gpsPort))
-        {
-            gpsFix = gpsParser.read();
+        gpsFix = gpsParser.read();
 
-            if (gpsFix.valid.time && gpsFix.valid.date)
-            {
+        if (gpsFix.valid.time && gpsFix.valid.date)
+        {
 #ifdef SERIAL_DEBUG
-                // Print GPS time
-                Serial.print("[getGPSTime] Current GPS Time: ");
-                Serial << gpsFix.dateTime;
-                Serial.println();
+            // Print GPS time
+            Serial.print("[readGPSTime] Current GPS Time: ");
+            Serial << gpsFix.dateTime;
+            Serial.println();
 #endif
 
-                // Return GPS time
-                return (NeoGPS::clock_t)gpsFix.dateTime;
-            }
+            // Adjust RTC to GPS time
+            rtc.adjust(DateTime((NeoGPS::clock_t)gpsFix.dateTime + SECONDS_FROM_1970_TO_2000));
         }
     }
-
-#ifdef SERIAL_DEBUG
-    // GPS read failed
-    Serial.println("[getGPSTime] Failed to read GPS time..");
-#endif
-
-    // Return 0 when GPS read failed
-    return 0;
 }
 
 // Adjusts date/time to local time zone with DST
@@ -199,13 +182,6 @@ static void adjustTimeToLocalDST(NeoGPS::clock_t& seconds)
 
 static clock12_t getAdjustedRTCTime()
 {
-    // First try to get GPS time
-    NeoGPS::clock_t gpsTime = getGPSTime(); // Seconds since 2000
-
-    // Adjust RTC time to GPS time if GPS reading succeeded
-    if (gpsTime != 0)
-        rtc.adjust(DateTime(gpsTime + SECONDS_FROM_1970_TO_2000));
-
     // Get RTC time in seconds
     NeoGPS::clock_t rtcTime = rtc.now().secondstime(); // Seconds since 2000
 
@@ -225,8 +201,8 @@ static clock12_t getAdjustedRTCTime()
 #endif
 
     // Convert date/time to 12 hour clock time in seconds
-    return (clock12_t)(dt.hours % 12) * DEF_SECONDS_PER_HOUR + (clock12_t)dt.minutes * DEF_SECONDS_PER_MINUTE
-         + (clock12_t)dt.seconds;
+    return ((clock12_t)dt.hours * DEF_SECONDS_PER_HOUR + (clock12_t)dt.minutes * DEF_SECONDS_PER_MINUTE + (clock12_t)dt.seconds)
+         % DEF_SECONDS_PER_CLOCK;
 }
 
 //====================================//
