@@ -112,6 +112,7 @@ static clock12_t clockTime = 0; // seconds
 
 static void readGPSAndUpdateRTC()
 {
+    // Read from GPS port if characters are available
     if (gpsParser.available(gpsPort))
     {
         gpsFix = gpsParser.read();
@@ -128,6 +129,11 @@ static void readGPSAndUpdateRTC()
             // Adjust RTC to GPS time
             rtc.adjust(DateTime((NeoGPS::clock_t)gpsFix.dateTime + SECONDS_FROM_1970_TO_2000));
         }
+    }
+    else
+    {
+        // Delay a little bit
+        delay(10);
     }
 }
 
@@ -315,6 +321,149 @@ static void writeClockTimeToEEPROM(const clock12_t& clock_time, clock12_t resolu
 //====================================//
 //========== Clock Methods ===========//
 //====================================//
+
+/*
+FLOW:
+
+Use states for every half minute
+1. GPS read (2 seconds), then calculate new speed
+2. Run to motor speed (accelerate around 1 second)
+3. Wait for half minute to end, then update and write clock time
+
+At all times:
+- Read metal zero minutes sensor
+*/
+
+#define SECONDS_PER_STATE_LOOP 30 // half a minute
+
+static enum LOOP_STATES
+{
+    STATE_READ_GPS   = 0,
+    STATE_ACCELERATE = 1,
+    STATE_WAIT_END   = 2
+};
+
+void setupClock()
+{
+    readClockTimeFromEEPROM(clockTime, SECONDS_PER_STATE_LOOP);
+    setMotorStepCount(0); // TODO: this needs to be set to the clock time read from EEPROM
+}
+
+void updateClock()
+{
+    // Always check zero minutes sensor first
+    static bool zero_minutes_reached = false;
+    if (isClockAtZeroMinutes())
+    {
+        zero_minutes_reached = true;
+        setMotorStepCount(0);
+    }
+
+    // Switch state
+    static int           loop_state         = STATE_READ_GPS;
+    static unsigned long loop_start_time_ms = millis();
+    switch (loop_state)
+    {
+        case STATE_READ_GPS:
+            // Allow GPS to be read for 2 seconds
+            if (millis() - loop_start_time_ms < 2000)
+            {
+                // Read GPS and update RTC
+                readGPSAndUpdateRTC();
+            }
+            else
+            {
+                // Get distance from clock time to RTC time + one state loop from now
+                long distance =
+                    (getAdjustedRTCTime() + SECONDS_PER_STATE_LOOP + DEF_SECONDS_PER_CLOCK - clockTime) % DEF_SECONDS_PER_CLOCK;
+
+                // Distance becomes negative if more than 6 hours
+                if (distance > DEF_SECONDS_PER_CLOCK / 2)
+                    distance -= DEF_SECONDS_PER_CLOCK;
+
+                // Get required motor speed
+                double speed     = (double)distance / SECONDS_PER_STATE_LOOP;
+                double min_speed = (double)MOTOR_MIN_RPM / MOTOR_NOM_RPM;
+                double max_speed = (double)MOTOR_MAX_RPM / MOTOR_NOM_RPM;
+
+                // Clip speed to max speed
+                if (speed > max_speed)
+                    speed = max_speed;
+
+                // If speed is bigger than minimum speed, adjust motor speed
+                // else stop the motor and wait till the end of the state loop
+                if (speed >= min_speed)
+                    runMotorAtSpeedWithinTime(speed, SECONDS_PER_STATE_LOOP);
+                else
+                    stopMotor();
+
+                // Go to next state
+                loop_state = STATE_ACCELERATE;
+            }
+
+            break;
+
+        case STATE_ACCELERATE:
+            // Accelerate or decelerate the motor and go to next state when ready
+            if (accelerateMotor())
+            {
+                // Go to next state
+                loop_state = STATE_WAIT_END;
+            }
+
+            break;
+
+        case STATE_WAIT_END:
+            // Update clock time if zero minutes reached
+            if (zero_minutes_reached)
+            {
+                zero_minutes_reached = false;
+
+                if (isClockAtZeroHours())
+                {
+                    // Set clock time to 3:00, as the hour sensor is located at 3:00
+                    clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR;
+                }
+                else
+                {
+                    // Round the clock time to a whole hour
+                    clock12_t hours = (clockTime + DEF_SECONDS_PER_HOUR / 2) / DEF_SECONDS_PER_HOUR;
+                    clockTime       = (hours * DEF_SECONDS_PER_HOUR) % DEF_SECONDS_PER_CLOCK;
+                }
+            }
+
+            // Wait till end of loop
+            unsigned long current_time = millis();
+
+            if (current_time - loop_start_time_ms >= SECONDS_PER_STATE_LOOP * 1000)
+            {
+                // End of loop reached
+                loop_start_time_ms = current_time;
+
+                // Update clock time by motor steps
+                static clock12_t prev_motor_seconds = 0;
+                clock12_t curr_motor_seconds = (clock12_t)((double)getMotorStepCount() * MOTOR_NOM_STEP_PERIOD_MS / 1000.);
+                clockTime                    = (clockTime + (curr_motor_seconds - prev_motor_seconds)) % DEF_SECONDS_PER_CLOCK;
+                prev_motor_seconds           = curr_motor_seconds;
+
+                // Write updated clock time to EEPROM
+                writeClockTimeToEEPROM(clockTime, SECONDS_PER_STATE_LOOP);
+
+                // Reset GPS parser before reading GPS
+                gpsParser.reset();
+
+                // Go to next state
+                loop_state = STATE_READ_GPS;
+            }
+            else
+            {
+                // Delay a little bit
+                delay(10);
+            }
+
+            break;
+    }
+}
 
 int32_t getRTCTime()
 {
