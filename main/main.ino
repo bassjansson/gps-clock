@@ -23,13 +23,7 @@
 #define SERIAL_DEBUG
 
 // Motor and clock settings
-#define MOTOR_DIRECTION         HIGH // HIGH or LOW (OFFICAL)
 
-#define NOMINAL_CLOCK_SPEED_MIN 98  // 0 - 255 (OFFICAL)
-#define NOMINAL_CLOCK_SPEED_MAX 118 // 0 - 255 (OFFICAL)
-
-int32_t       nominalClockSpeed = 108; // 0 - 255 (OFFICAL)
-const int32_t doubleClockSpeed  = 202; // 0 - 255 (OFFICAL)
 
 // Metal sensor settings
 #define METAL_SENSOR_HOUR_PIN   12 // Digital Pin 12 (OFFICAL)
@@ -452,148 +446,6 @@ void updateClock()
     }
 }
 
-int32_t getRTCTime()
-{
-    return getAdjustedRTCTime();
-}
-
-void setClockToZeroPosition()
-{
-    // Set clock time to zero
-    clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
-
-    // Set motor to double speed
-    setMotorSpeed(doubleClockSpeed);
-
-    // Wait until we hit zero minutes and zero hours
-    while (!(isClockAtZeroMinutes() && isClockAtZeroHours()))
-        delay(100); // 100 ms
-
-#ifdef SERIAL_DEBUG
-    Serial.println("[setClockToZeroPosition] Clock reached initial position of 03:00");
-#endif
-}
-
-int32_t getTimeDifferenceBetween(int32_t upperTime, int32_t lowerTime)
-{
-    int32_t timeDifference = upperTime - lowerTime;
-
-    if (abs(timeDifference) > DEF_SECONDS_PER_CLOCK / 2)
-    {
-        if (timeDifference > 0)
-            timeDifference -= DEF_SECONDS_PER_CLOCK;
-        else
-            timeDifference += DEF_SECONDS_PER_CLOCK;
-    }
-
-    return timeDifference;
-}
-
-void adjustClockSpeed()
-{
-    // Check if it is time to adjust the clock speed
-    if (isClockAtZeroMinutes())
-    {
-        // Update clock time
-        if (isClockAtZeroHours())
-            clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR; // The hour sensor is located at 03:00
-        else
-            clockTime = (clockTime + DEF_SECONDS_PER_HOUR) % DEF_SECONDS_PER_CLOCK;
-
-#ifdef SERIAL_DEBUG
-        Serial.print("[adjustClockSpeed] Current clock time in hours: ");
-        Serial.println((float)clockTime / DEF_SECONDS_PER_HOUR);
-#endif
-
-        // Get time difference between clock time and RTC time
-        int32_t timeDifference = getTimeDifferenceBetween(clockTime, getRTCTime());
-
-#ifdef SERIAL_DEBUG
-        Serial.print("[adjustClockSpeed] Difference between clock time and RTC time in hours: ");
-        Serial.println((float)timeDifference / DEF_SECONDS_PER_HOUR);
-#endif
-
-        // Set motor speed depending on time difference
-        if (timeDifference > DEF_SECONDS_PER_HOUR / 2)
-        {
-            // Case: the clock is half an hour or more ahead of RTC time
-
-            // Stop the motor
-            setMotorSpeed(0);
-
-#ifdef SERIAL_DEBUG
-            Serial.println("[adjustClockSpeed] Motor stopped, now waiting for RTC time to catch up...");
-#endif
-
-            // Wait till RTC time caught up with clock time
-            while (getTimeDifferenceBetween(clockTime, getRTCTime()) > 0)
-                delay(100); // 100 ms
-
-            // Set motor speed to nominal speed
-            setMotorSpeed(nominalClockSpeed);
-
-#ifdef SERIAL_DEBUG
-            Serial.println("[adjustClockSpeed] RTC time caught up with clock time! Running at nominal speed.");
-#endif
-        }
-        else if (timeDifference < -DEF_SECONDS_PER_HOUR / 2)
-        {
-            // Case: the clock is half an hour or more behind RTC time
-
-            // Set motor speed to double speed
-            setMotorSpeed(doubleClockSpeed);
-
-#ifdef SERIAL_DEBUG
-            Serial.println("[adjustClockSpeed] Motor set to double speed.");
-#endif
-        }
-        else
-        {
-            // Case: the clock is not more than half an hour off RTC time
-
-            // Adjust nominal clock speed, example:
-            // At 3:00 we were on time perfectly.
-            // We are now at 4:00 and we are 3 minutes ahead.
-            // That means, that our nominal speed that we used to calculate the clock speed at 3:00, is wrong.
-            // So, before we calculate the clock speed to get from 4:00 to five, we want a better nominal speed.
-            if (timeDifference > 30 && nominalClockSpeed > NOMINAL_CLOCK_SPEED_MIN)
-                nominalClockSpeed--;
-            if (timeDifference < 30 && nominalClockSpeed < NOMINAL_CLOCK_SPEED_MAX)
-                nominalClockSpeed++;
-
-#ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Nominal clock speed adjusted to: ");
-            Serial.println(nominalClockSpeed);
-#endif
-
-            // Calculate the clock speed
-            byte clockSpeed = (nominalClockSpeed * 2 - doubleClockSpeed)
-                            + ((doubleClockSpeed - nominalClockSpeed) * DEF_SECONDS_PER_HOUR * 10 + 5)
-                                  / ((timeDifference + DEF_SECONDS_PER_HOUR) * 10);
-
-            // Set motor speed to clock speed
-            setMotorSpeed(clockSpeed);
-
-#ifdef SERIAL_DEBUG
-            Serial.print("[adjustClockSpeed] Clock speed calculated and set to: ");
-            Serial.println(clockSpeed);
-#endif
-        }
-
-        // Delay until we passed zero minutes
-        int32_t waitTime = (getRTCTime() + 300) % DEF_SECONDS_PER_CLOCK; // 300 seconds = 5 minutes
-        while (getTimeDifferenceBetween(waitTime, getRTCTime()) > 0)
-            delay(100); // 100 ms
-
-#ifdef SERIAL_DEBUG
-        Serial.println("[adjustClockSpeed] End of 5 minute delay.");
-#endif
-    }
-
-    // Delay a little bit for stability
-    delay(100); // 100 ms
-}
-
 //======================================//
 //========== Arduino Methods ===========//
 //======================================//
@@ -618,17 +470,11 @@ void setup()
     // pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
     // pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
 
-    // Set clock to zero position
-    // setClockToZeroPosition();
-
     readClockTimeFromEEPROM(clockTime);
 }
 
 void loop()
 {
-    // Just keep adjusting the clock speed
-    // adjustClockSpeed();
-
     unsigned long start_time = millis();
 
     clockTime = (clockTime + DEF_SECONDS_PER_MINUTE) % DEF_SECONDS_PER_CLOCK;

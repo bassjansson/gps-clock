@@ -12,7 +12,7 @@
 #define MOTOR_MAX_PERIOD  150000 // Min timer period in us, RPM = 1 (before gear)
 #define MOTOR_MIN_PERIOD  150    // Max timer period in us, RPM = 1000 (before gear)
 
-#define MOTOR_DIRECTION   LOW // HIGH = forward, LOW = backward
+#define MOTOR_DIRECTION   LOW // LOW = forward, HIGH = backward
 #define MOTOR_PWM_DUTY    512 // 50% duty cycle, max 1024
 
 #define MOTOR_ACCEL       1.0f // Acceleration
