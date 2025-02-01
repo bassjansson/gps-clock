@@ -1,5 +1,7 @@
+// Motor includes
 #include <TimerOne.h>
 
+// Motor defines
 #define MOTOR_STEPS       200 // Full steps per revolution
 #define MOTOR_MICRO_STEPS 2   // Microsteps (2 * 200 = 400)
 
@@ -21,10 +23,7 @@
 #define MOTOR_DIR_PIN     8
 #define MOTOR_PUL_PIN     9
 
-// Test time in seconds
-#define TEST_TIME_SEC     10
-
-// Motor step count
+// Motor step counter
 volatile unsigned long motor_step_count = 0; // use volatile for shared variables
 
 static void stepCounterISR()
@@ -48,10 +47,10 @@ static unsigned long getMotorStepCount()
     return step_count_copy;
 }
 
-// Motor
-float motor_start_speed   = 0.0f;
-float motor_current_speed = 0.0f;
-float motor_target_speed  = 0.0f;
+// Motor speed
+static float motor_start_speed   = 0.0f;
+static float motor_current_speed = 0.0f;
+static float motor_target_speed  = 0.0f;
 
 static void setupMotor()
 {
@@ -111,6 +110,7 @@ float calculateNewMotorSpeed(float start_speed, long distance, unsigned long end
     return end_speed;
 }
 
+// Motor acceleration
 static unsigned long motor_accel_iter_pos      = 0;
 static unsigned long motor_accel_iter_cnt      = 0;
 static unsigned long motor_accel_start_time_us = micros();
@@ -167,6 +167,11 @@ static bool accelerateMotor()
 
     return motor_accel_iter_pos >= motor_accel_iter_cnt;
 }
+
+//======================================================
+// Test code
+
+#define TEST_TIME_SEC 10
 
 void setup()
 {
