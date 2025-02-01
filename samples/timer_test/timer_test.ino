@@ -1,20 +1,28 @@
 #include <TimerOne.h>
 
-#define MOTOR_STEPS       200    // Full steps per revolution
-#define MOTOR_MICRO_STEPS 2      // Microsteps (2 * 200 = 400)
-#define MOTOR_GEAR_RATIO  20     // Gear ratio
-#define MOTOR_RPM         8.5    // RPM after gear (20 * 8.5 = 170)
-#define MOTOR_DIRECTION   LOW    // HIGH = forward, LOW = backward
-#define MOTOR_PWM_DUTY    512    // 50% duty cycle, max 1024
-#define MOTOR_MAX_PERIOD  150000 // Min motor RPM = 1 (before gear)
-#define MOTOR_MIN_PERIOD  150    // Max motor RPM = 1000 (before gear)
-#define MOTOR_ACCEL       1.0    // Acceleration, deceleration
+#define MOTOR_STEPS       200 // Full steps per revolution
+#define MOTOR_MICRO_STEPS 2   // Microsteps (2 * 200 = 400)
+
+#define MOTOR_NOM_RPM     170 // Nominal RPM before gear (20 * 8.5 = 170)
+#define MOTOR_MIN_RPM     100 // Minimal working RPM
+#define MOTOR_MAX_RPM     500 // Maximum working RPM
+
+#define MOTOR_MAX_PERIOD  150000 // Min timer period in us, RPM = 1 (before gear)
+#define MOTOR_MIN_PERIOD  150    // Max timer period in us, RPM = 1000 (before gear)
+
+#define MOTOR_DIRECTION   LOW // HIGH = forward, LOW = backward
+#define MOTOR_PWM_DUTY    512 // 50% duty cycle, max 1024
+
+#define MOTOR_ACCEL       1.0f // Acceleration
+#define MOTOR_DECEL       0.7f // Deceleration
+
+#define MOTOR_ACC_PERIOD  1 // Acceleration update period in ms
 
 #define MOTOR_DIR_PIN     8
 #define MOTOR_PUL_PIN     9
 
 // Test time in seconds
-#define TEST_TIME_SEC     60
+#define TEST_TIME_SEC     10
 
 // Motor step count
 volatile unsigned long motor_step_count = 0; // use volatile for shared variables
@@ -41,63 +49,123 @@ static unsigned long getMotorStepCount()
 }
 
 // Motor
-const double MOTOR_NOM_PERIOD =
-    60000000. / ((double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_GEAR_RATIO * MOTOR_RPM); // 882.35 microseconds per step
-double motor_step_period = MOTOR_MAX_PERIOD;
+float motor_start_speed   = 0.0f;
+float motor_current_speed = 0.0f;
+float motor_target_speed  = 0.0f;
 
 static void setupMotor()
 {
     pinMode(MOTOR_DIR_PIN, OUTPUT);
     digitalWrite(MOTOR_DIR_PIN, MOTOR_DIRECTION);
 
-    motor_step_period = MOTOR_MAX_PERIOD;
+    motor_start_speed   = 0.0f;
+    motor_current_speed = 0.0f;
+    motor_target_speed  = 0.0f;
 
-    Timer1.initialize((unsigned long)(motor_step_period + 0.5));
+    Timer1.initialize(MOTOR_MAX_PERIOD);
     Timer1.pwm(MOTOR_PUL_PIN, MOTOR_PWM_DUTY);
     Timer1.attachInterrupt(stepCounterISR);
     Timer1.stop();
 }
 
-static void setMotorSpeed(double target_period)
+float calculateNewMotorSpeed(float start_speed, long distance, unsigned long end_time)
 {
-    if (target_period < MOTOR_MIN_PERIOD)
-        target_period = MOTOR_MIN_PERIOD;
-    if (target_period > MOTOR_MAX_PERIOD)
-        target_period = MOTOR_MAX_PERIOD;
+    static const float MIN_MOTOR_TARGET_SPEED = (float)MOTOR_MIN_RPM / MOTOR_NOM_RPM; // 100 RPM
+    static const float MAX_MOTOR_TARGET_SPEED = (float)MOTOR_MAX_RPM / MOTOR_NOM_RPM; // 500 RPM
 
-    double start_speed = MOTOR_NOM_PERIOD / motor_step_period;
-    double end_speed   = MOTOR_NOM_PERIOD / target_period;
-    double speed_diff  = end_speed - start_speed;
+    // Get target speed
+    float target_speed = (float)distance / end_time;
 
-    long iterations = (long)(fabs(speed_diff) * 1000. / MOTOR_ACCEL + 0.5);
-    if (iterations < 0)
-        iterations = 0;
+    // Return if target speed is not within boundaries
+    if (target_speed < MIN_MOTOR_TARGET_SPEED)
+        return 0.0f;
+    if (target_speed > MAX_MOTOR_TARGET_SPEED)
+        return MAX_MOTOR_TARGET_SPEED;
 
-    unsigned long start_time, end_time;
-    start_time = micros();
+    // Calculate end speed using the abc-formula
+    // a = start_speed
+    // b = end_speed
+    // y = target_speed
+    // x = end_time
+    // acc = MOTOR_ACCEL or MOTOR_DECEL
+    float end_speed = target_speed;
 
-    for (long i = 0; i < iterations; ++i)
+    if (target_speed >= start_speed)
     {
-        motor_step_period = MOTOR_NOM_PERIOD / (start_speed + speed_diff * (double)i / iterations);
-
-        Timer1.setPeriod((unsigned long)(motor_step_period + 0.5));
-        Timer1.setPwmDuty(MOTOR_PUL_PIN, MOTOR_PWM_DUTY);
-
-        end_time = (unsigned long)(i + 1) * 1000; // Every iteration takes 1000 microseconds
-        while (micros() - start_time < end_time)
-            delayMicroseconds(1);
+        float d   = (float)MOTOR_ACCEL * end_time;
+        end_speed = start_speed + d - sqrtf(d * (d + 2.0f * (start_speed - target_speed)));
+    }
+    else
+    {
+        float d   = (float)-MOTOR_DECEL * end_time;
+        end_speed = start_speed + d + sqrtf(d * (d + 2.0f * (start_speed - target_speed)));
     }
 
-    motor_step_period = target_period;
+    // Clip end speed
+    if (end_speed < MIN_MOTOR_TARGET_SPEED)
+        end_speed = 0.0f;
+    if (end_speed > MAX_MOTOR_TARGET_SPEED)
+        end_speed = MAX_MOTOR_TARGET_SPEED;
 
-    Timer1.setPeriod((unsigned long)(motor_step_period + 0.5));
-    Timer1.setPwmDuty(MOTOR_PUL_PIN, MOTOR_PWM_DUTY);
+    // Return calculated end speed
+    return end_speed;
 }
 
-static void stopMotor()
+static unsigned long motor_accel_iter_pos      = 0;
+static unsigned long motor_accel_iter_cnt      = 0;
+static unsigned long motor_accel_start_time_us = micros();
+
+static void beginMotorAcceleration(long distance, unsigned long end_time)
 {
-    setMotorSpeed(MOTOR_MAX_PERIOD);
-    Timer1.stop();
+    motor_start_speed  = motor_current_speed;
+    motor_target_speed = calculateNewMotorSpeed(motor_start_speed, distance, end_time);
+
+    float speed_diff = motor_target_speed - motor_start_speed;
+    float accel      = speed_diff >= 0.0f ? MOTOR_ACCEL : MOTOR_DECEL;
+
+    motor_accel_iter_pos = 0;
+
+    long count = (long)(fabsf(speed_diff) * (1000.f / MOTOR_ACC_PERIOD) / accel + 0.5f);
+    if (count < 0)
+        count = 0;
+    motor_accel_iter_cnt = count;
+
+    motor_accel_start_time_us = micros();
+}
+
+static bool accelerateMotor()
+{
+    static const float MOTOR_NOM_PERIOD =
+        60000000.f / ((float)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
+
+    static const float MIN_MOTOR_ACCEL_SPEED = MOTOR_NOM_PERIOD / MOTOR_MAX_PERIOD; // 1 RPM
+    static const float MAX_MOTOR_ACCEL_SPEED = MOTOR_NOM_PERIOD / MOTOR_MIN_PERIOD; // 1000 RPM
+
+    motor_accel_iter_pos++;
+
+    float speed_diff = motor_target_speed - motor_start_speed;
+    float new_speed  = motor_start_speed + speed_diff * ((float)motor_accel_iter_pos / motor_accel_iter_cnt);
+
+    bool stop_timer = new_speed < MIN_MOTOR_ACCEL_SPEED;
+
+    if (new_speed < MIN_MOTOR_ACCEL_SPEED)
+        new_speed = MIN_MOTOR_ACCEL_SPEED;
+    if (new_speed > MAX_MOTOR_ACCEL_SPEED)
+        new_speed = MAX_MOTOR_ACCEL_SPEED;
+
+    unsigned long end_time_us = motor_accel_iter_pos * MOTOR_ACC_PERIOD * 1000;
+    while (micros() - motor_accel_start_time_us < end_time_us)
+        delayMicroseconds(1);
+
+    motor_current_speed = new_speed;
+
+    Timer1.setPeriod((unsigned long)(MOTOR_NOM_PERIOD / motor_current_speed + 0.5f));
+    Timer1.setPwmDuty(MOTOR_PUL_PIN, MOTOR_PWM_DUTY);
+
+    if (stop_timer)
+        Timer1.stop();
+
+    return motor_accel_iter_pos >= motor_accel_iter_cnt;
 }
 
 void setup()
@@ -111,38 +179,56 @@ void loop()
 {
     // Delay 2 seconds
     Serial.println("Loop start.");
+    Serial.println();
     delay(2000);
+    unsigned long start_time, stop_time, test_step_cnt;
 
     // Accelerate
-    unsigned long start_time = micros();
-    stopMotor();
+    Serial.println("Accelerating to double speed..");
     setMotorStepCount(0);
-    setMotorSpeed(MOTOR_NOM_PERIOD);
-    unsigned long ramp_up_steps = getMotorStepCount();
-    unsigned long ramp_up_time  = micros() - start_time;
-
-    // Cruise
-    double total_time    = TEST_TIME_SEC * 1000000.;
-    double cruise_time   = total_time - ramp_up_time * 2.;
-    double total_steps   = total_time / MOTOR_NOM_PERIOD;
-    double cruise_steps  = total_steps - ramp_up_steps * 2.;
-    double cruise_period = cruise_time / cruise_steps;
-    setMotorSpeed(cruise_period);
-    Serial.print("Ramp up steps: ");
-    Serial.println(ramp_up_steps);
-    Serial.print("Ramp up time: ");
-    Serial.println(ramp_up_time);
-    Serial.print("Cruise speed: ");
-    Serial.println(MOTOR_NOM_PERIOD / cruise_period);
-    while (micros() - start_time < (total_time - ramp_up_time))
-        delay(1);
+    start_time = micros();
+    beginMotorAcceleration(TEST_TIME_SEC * 2, TEST_TIME_SEC);
+    while (!accelerateMotor())
+        ;
+    stop_time = micros();
+    Serial.print("Acc time in ms: ");
+    Serial.println((stop_time - start_time) / 1000.f);
+    while (micros() - start_time < TEST_TIME_SEC * 1000000)
+        ;
+    test_step_cnt = getMotorStepCount();
+    Serial.print("Step count after acc: ");
+    Serial.println(test_step_cnt);
+    Serial.println();
 
     // Decelerate
-    stopMotor();
-    unsigned long final_steps = getMotorStepCount();
-    double        final_time  = micros() - start_time;
-    Serial.print("Final steps: ");
-    Serial.println(final_steps);
-    Serial.print("Final time: ");
-    Serial.println(final_time);
+    Serial.println("Decelerating to nominal speed..");
+    setMotorStepCount(0);
+    start_time = micros();
+    beginMotorAcceleration(TEST_TIME_SEC, TEST_TIME_SEC);
+    while (!accelerateMotor())
+        ;
+    stop_time = micros();
+    Serial.print("Dec time in ms: ");
+    Serial.println((stop_time - start_time) / 1000.f);
+    while (micros() - start_time < TEST_TIME_SEC * 1000000)
+        ;
+    test_step_cnt = getMotorStepCount();
+    Serial.print("Step count after dec: ");
+    Serial.println(test_step_cnt);
+    Serial.println();
+
+    // Stop motor
+    Serial.println("Stopping motor..");
+    setMotorStepCount(0);
+    start_time = micros();
+    beginMotorAcceleration(0, TEST_TIME_SEC);
+    while (!accelerateMotor())
+        ;
+    stop_time     = micros();
+    test_step_cnt = getMotorStepCount();
+    Serial.print("Stop time in ms: ");
+    Serial.println((stop_time - start_time) / 1000.f);
+    Serial.print("Step count after stop: ");
+    Serial.println(test_step_cnt);
+    Serial.println();
 }

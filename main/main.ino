@@ -381,21 +381,8 @@ void updateClock()
                 if (distance > DEF_SECONDS_PER_CLOCK / 2)
                     distance -= DEF_SECONDS_PER_CLOCK;
 
-                // Get required motor speed
-                double speed     = (double)distance / SECONDS_PER_STATE_LOOP;
-                double min_speed = (double)MOTOR_MIN_RPM / MOTOR_NOM_RPM;
-                double max_speed = (double)MOTOR_MAX_RPM / MOTOR_NOM_RPM;
-
-                // Clip speed to max speed
-                if (speed > max_speed)
-                    speed = max_speed;
-
-                // If speed is bigger than minimum speed, adjust motor speed
-                // else stop the motor and wait till the end of the state loop
-                if (speed >= min_speed)
-                    runMotorAtSpeedWithinTime(speed, SECONDS_PER_STATE_LOOP);
-                else
-                    stopMotor();
+                // Begin motor acceleration towards new speed
+                beginMotorAcceleration(distance, SECONDS_PER_STATE_LOOP);
 
                 // Go to next state
                 loop_state = STATE_ACCELERATE;
