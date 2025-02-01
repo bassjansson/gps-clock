@@ -23,6 +23,9 @@
 #define MOTOR_DIR_PIN     8
 #define MOTOR_PUL_PIN     9
 
+static const float MOTOR_NOM_PERIOD =
+    60000000.f / ((float)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
+
 // Motor step counter
 volatile unsigned long motor_step_count = 0; // use volatile for shared variables
 
@@ -135,9 +138,6 @@ static void beginMotorAcceleration(long distance, unsigned long end_time)
 
 static bool accelerateMotor()
 {
-    static const float MOTOR_NOM_PERIOD =
-        60000000.f / ((float)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
-
     static const float MIN_MOTOR_ACCEL_SPEED = MOTOR_NOM_PERIOD / MOTOR_MAX_PERIOD; // 1 RPM
     static const float MAX_MOTOR_ACCEL_SPEED = MOTOR_NOM_PERIOD / MOTOR_MIN_PERIOD; // 1000 RPM
 

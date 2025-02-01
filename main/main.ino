@@ -234,6 +234,9 @@ static clock12_t getAdjustedRTCTime()
 #define MOTOR_DIR_PIN     8
 #define MOTOR_PUL_PIN     9
 
+static const float MOTOR_NOM_PERIOD =
+    60000000.f / ((float)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
+
 // Motor step counter
 volatile unsigned long motor_step_count = 0; // use volatile for shared variables
 
@@ -346,9 +349,6 @@ static void beginMotorAcceleration(long distance, unsigned long end_time)
 
 static bool accelerateMotor()
 {
-    static const float MOTOR_NOM_PERIOD =
-        60000000.f / ((float)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
-
     static const float MIN_MOTOR_ACCEL_SPEED = MOTOR_NOM_PERIOD / MOTOR_MAX_PERIOD; // 1 RPM
     static const float MAX_MOTOR_ACCEL_SPEED = MOTOR_NOM_PERIOD / MOTOR_MIN_PERIOD; // 1000 RPM
 
@@ -588,9 +588,9 @@ void updateClock()
 
                 // Update clock time by motor steps
                 static clock12_t prev_motor_seconds = 0;
-                clock12_t curr_motor_seconds = (clock12_t)((double)getMotorStepCount() * MOTOR_NOM_STEP_PERIOD_MS / 1000.);
-                clockTime                    = (clockTime + (curr_motor_seconds - prev_motor_seconds)) % DEF_SECONDS_PER_CLOCK;
-                prev_motor_seconds           = curr_motor_seconds;
+                clock12_t        curr_motor_seconds = (clock12_t)((float)getMotorStepCount() * MOTOR_NOM_PERIOD / 1000000.f);
+                clockTime          = (clockTime + (curr_motor_seconds - prev_motor_seconds)) % DEF_SECONDS_PER_CLOCK;
+                prev_motor_seconds = curr_motor_seconds;
 
                 // Write updated clock time to EEPROM
                 writeClockTimeToEEPROM(clockTime, SECONDS_PER_STATE_LOOP);
