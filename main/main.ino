@@ -393,6 +393,12 @@ static bool accelerateMotor()
 //========== Metal Sensor Methods ===========//
 //===========================================//
 
+void setupMetalSensors()
+{
+    pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
+    pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
+}
+
 // Blocking
 bool isClockAtZeroHours()
 {
@@ -640,9 +646,8 @@ void setup()
     // Begin RTC I2C communication
     rtc.begin();
 
-    // Setup metal sensor pins
-    pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
-    pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
+    // Setup metal sensor
+    setupMetalSensors();
 
     // Setup motor
     setupMotor();
