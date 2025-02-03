@@ -22,20 +22,46 @@
 // Enable serial debug
 #define SERIAL_DEBUG
 
-// Motor and clock settings
+// State loop settings
+#define SECONDS_PER_STATE_LOOP   30 // Duration of state loop, 30 seconds = half a minute
 
+// Motor settings
+#define MOTOR_STEPS              200 // Full steps per revolution
+#define MOTOR_MICRO_STEPS        2   // Microsteps (2 * 200 = 400)
+
+#define MOTOR_NOM_RPM            170 // Nominal RPM before gear (20 * 8.5 = 170)
+#define MOTOR_MIN_RPM            100 // Minimal working RPM
+#define MOTOR_MAX_RPM            500 // Maximum working RPM
+
+#define MOTOR_MAX_PERIOD         150000 // Max timer period in us, RPM = 1 (before gear)
+#define MOTOR_MIN_PERIOD         150    // Min timer period in us, RPM = 1000 (before gear)
+
+#define MOTOR_DIRECTION          LOW // LOW = forward, HIGH = backward
+#define MOTOR_PWM_DUTY           512 // 50% duty cycle, max 1024
+
+#define MOTOR_ACCEL              1.0f // Acceleration, smaller slower, higher is faster
+#define MOTOR_DECEL              1.0f // Deceleration, smaller slower, higher is faster
+
+#define MOTOR_ACC_PERIOD         1 // Acceleration update period in ms
+
+#define MOTOR_DIR_PIN            8 // Motor direction pin (digital pin 8)
+#define MOTOR_PUL_PIN            9 // Motor pulse pin (digital pin 9)
 
 // Metal sensor settings
-#define METAL_SENSOR_HOUR_PIN   12 // Digital Pin 12 (OFFICAL)
-#define METAL_SENSOR_MINUTE_PIN 11 // Digital Pin 11 (OFFICAL)
-#define METAL_SENSOR_HOUR_POS   3  // Hours (0 - 11) (OFFICAL)
+#define METAL_SENSOR_HOUR_PIN    12 // Metal sensor hour pin (digital pin 12)
+#define METAL_SENSOR_MINUTE_PIN  11 // Metal sensor minute pin (digital pin 11)
+
+#define METAL_SENSOR_HOUR_POS    3 // Metal sensor hour position, sitting at 03:00
+
+#define METAL_SENSOR_CHECK_COUNT 4   // How many checks to perform for each metal sensor
+#define METAL_SENSOR_CHECK_DELAY 100 // Amount of time between each metal sensor check in ms
 
 // GPS serial port pins
-#define GPS_PORT_RX_PIN         2 // Digital Pin 2 (attached to TX of GPS module)
-#define GPS_PORT_TX_PIN         3 // Digital Pin 3 (attached to RX of GPS module)
+#define GPS_PORT_RX_PIN          2 // GPS serial port RX pin (digital pin 2, attached to TX of GPS module)
+#define GPS_PORT_TX_PIN          3 // GPS serial port TX pin (digital pin 3, attached to RX of GPS module)
 
 // Local time zone offset
-#define TIME_ZONE               (+1) // UTC+1 (Amsterdam)
+#define TIME_ZONE                (+1) // UTC+1 (Amsterdam)
 
 // EU daylight saving time configuration
 static const struct
@@ -217,28 +243,7 @@ static clock12_t getAdjustedRTCTime()
 //========== Motor Methods ===========//
 //====================================//
 
-// Motor defines
-#define MOTOR_STEPS       200 // Full steps per revolution
-#define MOTOR_MICRO_STEPS 2   // Microsteps (2 * 200 = 400)
-
-#define MOTOR_NOM_RPM     170 // Nominal RPM before gear (20 * 8.5 = 170)
-#define MOTOR_MIN_RPM     100 // Minimal working RPM
-#define MOTOR_MAX_RPM     500 // Maximum working RPM
-
-#define MOTOR_MAX_PERIOD  150000 // Min timer period in us, RPM = 1 (before gear)
-#define MOTOR_MIN_PERIOD  150    // Max timer period in us, RPM = 1000 (before gear)
-
-#define MOTOR_DIRECTION   LOW // LOW = forward, HIGH = backward
-#define MOTOR_PWM_DUTY    512 // 50% duty cycle, max 1024
-
-#define MOTOR_ACCEL       1.0f // Acceleration
-#define MOTOR_DECEL       0.7f // Deceleration
-
-#define MOTOR_ACC_PERIOD  1 // Acceleration update period in ms
-
-#define MOTOR_DIR_PIN     8
-#define MOTOR_PUL_PIN     9
-
+// Motor nominal period in microseconds
 static const double MOTOR_NOM_PERIOD =
     (60. * ONE_MIL_DOUBLE) / ((double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
 
@@ -388,9 +393,6 @@ static bool accelerateMotor()
 //========== Metal Sensor Methods ===========//
 //===========================================//
 
-#define METAL_SENSOR_CHECK_COUNT 4
-#define METAL_SENSOR_CHECK_DELAY 100
-
 // Blocking
 bool isClockAtZeroHours()
 {
@@ -495,8 +497,6 @@ Use states for every half minute
 At all times:
 - Read metal zero minutes sensor
 */
-
-#define SECONDS_PER_STATE_LOOP 30 // half a minute
 
 enum LOOP_STATES
 {
