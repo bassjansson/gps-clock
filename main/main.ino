@@ -108,9 +108,6 @@ static NeoSWSerial gpsPort(GPS_PORT_RX_PIN, GPS_PORT_TX_PIN);
 // RTC object
 static RTC_DS1307 rtc;
 
-// Clock time
-static clock12_t clockTime = 0; // seconds
-
 //======================================//
 //========== GPS/RTC Methods ===========//
 //======================================//
@@ -508,6 +505,7 @@ enum LOOP_STATES
     STATE_WAIT_END   = 2
 };
 
+static clock12_t clockTime          = 0; // seconds
 static clock12_t prev_motor_seconds = 0;
 
 void setupClock()
