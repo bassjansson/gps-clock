@@ -55,6 +55,9 @@ static const clock12_t DEF_SECONDS_PER_MINUTE = 60;
 static const clock12_t DEF_SECONDS_PER_HOUR   = 60 * DEF_SECONDS_PER_MINUTE;
 static const clock12_t DEF_SECONDS_PER_CLOCK  = 12 * DEF_SECONDS_PER_HOUR;
 
+// Other constants
+#define ONE_MIL_DOUBLE 1000000.
+
 
 //==============================//
 //========== Includes ==========//
@@ -234,8 +237,8 @@ static clock12_t getAdjustedRTCTime()
 #define MOTOR_DIR_PIN     8
 #define MOTOR_PUL_PIN     9
 
-static const float MOTOR_NOM_PERIOD =
-    60000000.f / ((float)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
+static const double MOTOR_NOM_PERIOD =
+    (60. * ONE_MIL_DOUBLE) / ((double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
 
 // Motor step counter
 volatile unsigned long motor_step_count = 0; // use volatile for shared variables
@@ -370,7 +373,7 @@ static bool accelerateMotor()
 
     motor_current_speed = new_speed;
 
-    Timer1.setPeriod((unsigned long)(MOTOR_NOM_PERIOD / motor_current_speed + 0.5f));
+    Timer1.setPeriod((unsigned long)(MOTOR_NOM_PERIOD / motor_current_speed + 0.5));
     Timer1.setPwmDuty(MOTOR_PUL_PIN, MOTOR_PWM_DUTY);
 
     if (stop_timer)
@@ -495,17 +498,22 @@ At all times:
 
 #define SECONDS_PER_STATE_LOOP 30 // half a minute
 
-static enum LOOP_STATES
+enum LOOP_STATES
 {
     STATE_READ_GPS   = 0,
     STATE_ACCELERATE = 1,
     STATE_WAIT_END   = 2
 };
 
+static clock12_t prev_motor_seconds = 0;
+
 void setupClock()
 {
     readClockTimeFromEEPROM(clockTime, SECONDS_PER_STATE_LOOP);
-    setMotorStepCount(0); // TODO: this needs to be set to the clock time read from EEPROM
+
+    prev_motor_seconds = clockTime % DEF_SECONDS_PER_HOUR;
+
+    setMotorStepCount((unsigned long)((double)prev_motor_seconds / MOTOR_NOM_PERIOD * ONE_MIL_DOUBLE + 0.5));
 }
 
 void updateClock()
@@ -587,8 +595,8 @@ void updateClock()
                 loop_start_time_ms = current_time;
 
                 // Update clock time by motor steps
-                static clock12_t prev_motor_seconds = 0;
-                clock12_t        curr_motor_seconds = (clock12_t)((float)getMotorStepCount() * MOTOR_NOM_PERIOD / 1000000.f);
+                clock12_t curr_motor_seconds =
+                    (clock12_t)((double)getMotorStepCount() / ONE_MIL_DOUBLE * MOTOR_NOM_PERIOD + 0.5);
                 clockTime          = (clockTime + (curr_motor_seconds - prev_motor_seconds)) % DEF_SECONDS_PER_CLOCK;
                 prev_motor_seconds = curr_motor_seconds;
 
@@ -626,31 +634,24 @@ void setup()
 #endif
 
     // Begin GPS serial communication
-    // gpsPort.begin(9600);
+    gpsPort.begin(9600);
 
     // Begin RTC I2C communication
-    // rtc.begin();
+    rtc.begin();
 
     // Setup metal sensor pins
-    // pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
-    // pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
+    pinMode(METAL_SENSOR_HOUR_PIN, INPUT);
+    pinMode(METAL_SENSOR_MINUTE_PIN, INPUT);
 
-    readClockTimeFromEEPROM(clockTime);
+    // Setup motor
+    setupMotor();
+
+    // Setup clock
+    setupClock();
 }
 
 void loop()
 {
-    unsigned long start_time = millis();
-
-    clockTime = (clockTime + DEF_SECONDS_PER_MINUTE) % DEF_SECONDS_PER_CLOCK;
-
-    // writeClockTimeToEEPROM(clockTime);
-
-    Serial.print("Current clock time: ");
-    Serial.print(clockTime);
-    Serial.print(" and EEPROM pos: ");
-    Serial.println(EEPROM_pos);
-
-    while (millis() - start_time < 1000)
-        delay(1);
+    // Update clock
+    updateClock();
 }
