@@ -63,11 +63,19 @@ static const clock12_t DEF_SECONDS_PER_CLOCK  = 12 * DEF_SECONDS_PER_HOUR;
 //========== Includes ==========//
 //==============================//
 
-#include <Wire.h>
-#include <RTClib.h>
+// GPS
 #include <NMEAGPS.h>
 #include <NeoSWSerial.h>
 
+// RTC
+#include <Wire.h>
+#include <RTClib.h>
+
+// Motor
+#include <TimerOne.h>
+
+// Clock
+#include <EEPROM.h>
 
 //====================================//
 //========== NeoGPS Config ===========//
@@ -211,9 +219,6 @@ static clock12_t getAdjustedRTCTime()
 //====================================//
 //========== Motor Methods ===========//
 //====================================//
-
-// Motor includes
-#include <TimerOne.h>
 
 // Motor defines
 #define MOTOR_STEPS       200 // Full steps per revolution
@@ -435,8 +440,6 @@ bool isClockAtZeroMinutes()
 //====================================//
 //============= EEPROM ===============//
 //====================================//
-
-#include <EEPROM.h>
 
 static uint16_t EEPROM_pos = 0;
 
