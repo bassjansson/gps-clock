@@ -16,15 +16,19 @@
 #define MOTOR_PWM_DUTY    512 // 50% duty cycle, max 1024
 
 #define MOTOR_ACCEL       1.0f // Acceleration
-#define MOTOR_DECEL       0.7f // Deceleration
+#define MOTOR_DECEL       1.0f // Deceleration
 
 #define MOTOR_ACC_PERIOD  1 // Acceleration update period in ms
 
 #define MOTOR_DIR_PIN     8
 #define MOTOR_PUL_PIN     9
 
-static const float MOTOR_NOM_PERIOD =
-    60000000.f / ((float)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
+// Other constants
+#define ONE_MIL_DOUBLE 1000000.
+
+// Motor nominal period in microseconds
+static const double MOTOR_NOM_PERIOD =
+    (60. * ONE_MIL_DOUBLE) / ((double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
 
 // Motor step counter
 volatile unsigned long motor_step_count = 0; // use volatile for shared variables
@@ -159,7 +163,7 @@ static bool accelerateMotor()
 
     motor_current_speed = new_speed;
 
-    Timer1.setPeriod((unsigned long)(MOTOR_NOM_PERIOD / motor_current_speed + 0.5f));
+    Timer1.setPeriod((unsigned long)(MOTOR_NOM_PERIOD / motor_current_speed + 0.5));
     Timer1.setPwmDuty(MOTOR_PUL_PIN, MOTOR_PWM_DUTY);
 
     if (stop_timer)

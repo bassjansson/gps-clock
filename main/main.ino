@@ -296,6 +296,10 @@ float calculateNewMotorSpeed(float start_speed, long distance, unsigned long end
     static const float MIN_MOTOR_TARGET_SPEED = (float)MOTOR_MIN_RPM / MOTOR_NOM_RPM; // 100 RPM
     static const float MAX_MOTOR_TARGET_SPEED = (float)MOTOR_MAX_RPM / MOTOR_NOM_RPM; // 500 RPM
 
+    // End time can not be zero
+    if (end_time < 1)
+        end_time = 1;
+
     // Get target speed
     float target_speed = (float)distance / end_time;
 
@@ -316,12 +320,12 @@ float calculateNewMotorSpeed(float start_speed, long distance, unsigned long end
     if (target_speed >= start_speed)
     {
         float d   = (float)MOTOR_ACCEL * end_time;
-        end_speed = start_speed + d - sqrtf(d * (d + 2.0f * (start_speed - target_speed)));
+        end_speed = start_speed + d - sqrtf(fabsf(d * (d + 2.0f * (start_speed - target_speed))));
     }
     else
     {
         float d   = (float)-MOTOR_DECEL * end_time;
-        end_speed = start_speed + d + sqrtf(d * (d + 2.0f * (start_speed - target_speed)));
+        end_speed = start_speed + d + sqrtf(fabsf(d * (d + 2.0f * (start_speed - target_speed))));
     }
 
     // Clip end speed
@@ -350,8 +354,8 @@ static void beginMotorAcceleration(long distance, unsigned long end_time)
     motor_accel_iter_pos = 0;
 
     long count = (long)(fabsf(speed_diff) * (1000.f / MOTOR_ACC_PERIOD) / accel + 0.5f);
-    if (count < 0)
-        count = 0;
+    if (count < 1)
+        count = 1;
     motor_accel_iter_cnt = count;
 
     motor_accel_start_time_us = micros();
@@ -473,6 +477,9 @@ static void readClockTimeFromEEPROM(clock12_t& clock_time, clock12_t resolution)
 
 static void writeClockTimeToEEPROM(const clock12_t& clock_time, clock12_t resolution)
 {
+    if (resolution < 1)
+        resolution = 1;
+
     int t1 = (clock_time % DEF_SECONDS_PER_CLOCK) / resolution;
 
     static int prev_t1 = -1;
@@ -493,22 +500,23 @@ static void writeClockTimeToEEPROM(const clock12_t& clock_time, clock12_t resolu
 //====================================//
 
 /*
-FLOW:
+State loop flow:
 
-Use states for every half minute
-1. GPS read (2 seconds), then calculate new speed
-2. Run to motor speed (accelerate around 1 second)
+Using three states and going through them every half a minute:
+1. GPS read (2 seconds), RTC update and calculate new speed
+2. Accelerate motor to new speed (around 1 second)
 3. Wait for half minute to end, then update and write clock time
 
 At all times:
-- Read metal zero minutes sensor
+- Read zero minutes metal sensor
 */
 
-enum LOOP_STATES
+enum LoopState
 {
     STATE_READ_GPS   = 0,
     STATE_ACCELERATE = 1,
-    STATE_WAIT_END   = 2
+    STATE_WAIT_END   = 2,
+    STATE_WRITE_TIME = 3
 };
 
 static clock12_t clockTime          = 0; // Mechanical clock time in seconds
@@ -534,11 +542,12 @@ void updateClock()
     }
 
     // Switch state
-    static int           loop_state         = STATE_READ_GPS;
+    static LoopState     loop_state         = STATE_READ_GPS;
     static unsigned long loop_start_time_ms = millis();
     switch (loop_state)
     {
         case STATE_READ_GPS:
+        {
             // Allow GPS to be read for 2 seconds
             if (millis() - loop_start_time_ms < 2000)
             {
@@ -547,6 +556,9 @@ void updateClock()
             }
             else
             {
+                // Stop GPS serial reading
+                gpsPort.ignore();
+
                 // Get distance from clock time to RTC time + one state loop from now
                 long distance =
                     (getAdjustedRTCTime() + SECONDS_PER_STATE_LOOP + DEF_SECONDS_PER_CLOCK - clockTime) % DEF_SECONDS_PER_CLOCK;
@@ -558,28 +570,42 @@ void updateClock()
                 // Begin motor acceleration towards new speed
                 beginMotorAcceleration(distance, SECONDS_PER_STATE_LOOP);
 
+#ifdef SERIAL_DEBUG
+                // Print distance
+                Serial.print("[updateClock] New target speed: ");
+                Serial.print(motor_target_speed);
+                Serial.print(" , time distance: ");
+                Serial.println(distance);
+#endif
+
                 // Go to next state
                 loop_state = STATE_ACCELERATE;
             }
-
-            break;
+        }
+        break;
 
         case STATE_ACCELERATE:
+        {
             // Accelerate or decelerate the motor and go to next state when ready
             if (accelerateMotor())
             {
                 // Go to next state
                 loop_state = STATE_WAIT_END;
             }
-
-            break;
+        }
+        break;
 
         case STATE_WAIT_END:
+        {
+            // Save current time
+            unsigned long current_time = millis();
+
             // Update clock time if zero minutes reached
             if (zero_minutes_reached)
             {
                 zero_minutes_reached = false;
 
+                // Check zero hours metal sensor
                 if (isClockAtZeroHours())
                 {
                     // Set clock time to 3:00, as the hour sensor is located at 3:00
@@ -591,38 +617,78 @@ void updateClock()
                     clock12_t hours = (clockTime + DEF_SECONDS_PER_HOUR / 2) / DEF_SECONDS_PER_HOUR;
                     clockTime       = (hours * DEF_SECONDS_PER_HOUR) % DEF_SECONDS_PER_CLOCK;
                 }
-            }
 
-            // Wait till end of loop
-            unsigned long current_time = millis();
+                // Reset previous motor seconds
+                prev_motor_seconds = clockTime % DEF_SECONDS_PER_HOUR;
 
-            if (current_time - loop_start_time_ms >= SECONDS_PER_STATE_LOOP * 1000)
-            {
                 // End of loop reached
                 loop_start_time_ms = current_time;
 
+                // Go to next state
+                loop_state = STATE_WRITE_TIME;
+            }
+            // Otherwise, update clock time if end of loop reached
+            else if (current_time - loop_start_time_ms >= SECONDS_PER_STATE_LOOP * 1000)
+            {
                 // Update clock time by motor steps
                 clock12_t curr_motor_seconds =
                     (clock12_t)((double)getMotorStepCount() / ONE_MIL_DOUBLE * MOTOR_NOM_PERIOD + 0.5);
                 clockTime          = (clockTime + (curr_motor_seconds - prev_motor_seconds)) % DEF_SECONDS_PER_CLOCK;
                 prev_motor_seconds = curr_motor_seconds;
 
-                // Write updated clock time to EEPROM
-                writeClockTimeToEEPROM(clockTime, SECONDS_PER_STATE_LOOP);
-
-                // Reset GPS parser before reading GPS
-                gpsParser.reset();
+                // End of loop reached
+                loop_start_time_ms = current_time;
 
                 // Go to next state
-                loop_state = STATE_READ_GPS;
+                loop_state = STATE_WRITE_TIME;
             }
             else
             {
                 // Delay a little bit
                 delay(10);
             }
+        }
+        break;
 
-            break;
+        case STATE_WRITE_TIME:
+        {
+            // Write updated clock time to EEPROM
+            writeClockTimeToEEPROM(clockTime, SECONDS_PER_STATE_LOOP);
+
+#ifdef SERIAL_DEBUG
+            // Get hours, minutes, seconds
+            uint8_t hours   = clockTime / DEF_SECONDS_PER_HOUR;
+            uint8_t minutes = (clockTime % DEF_SECONDS_PER_HOUR) / DEF_SECONDS_PER_MINUTE;
+            uint8_t seconds = clockTime % DEF_SECONDS_PER_MINUTE;
+
+            // Print mechanical clock time
+            Serial.println();
+            Serial.print("[updateClock] Mechanical clock time: ");
+
+            if (hours < 10)
+                Serial.print("0");
+            Serial.print(hours);
+            Serial.print(":");
+
+            if (minutes < 10)
+                Serial.print("0");
+            Serial.print(minutes);
+            Serial.print(":");
+
+            if (seconds < 10)
+                Serial.print("0");
+            Serial.println(seconds);
+#endif
+
+            // Reset GPS parser before reading GPS again
+            gpsParser.reset();
+            gpsPort.flush();
+            gpsPort.listen();
+
+            // Go to next state
+            loop_state = STATE_READ_GPS;
+        }
+        break;
     }
 }
 
@@ -642,6 +708,7 @@ void setup()
 
     // Begin GPS serial communication
     gpsPort.begin(9600);
+    gpsPort.ignore();
 
     // Begin RTC I2C communication
     rtc.begin();
