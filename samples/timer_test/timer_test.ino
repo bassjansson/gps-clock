@@ -1,7 +1,7 @@
 // Motor includes
 #include <TimerOne.h>
 
-// Motor defines
+// Motor settings
 #define MOTOR_STEPS       200 // Full steps per revolution
 #define MOTOR_MICRO_STEPS 2   // Microsteps (2 * 200 = 400)
 
@@ -9,26 +9,23 @@
 #define MOTOR_MIN_RPM     100 // Minimal working RPM
 #define MOTOR_MAX_RPM     500 // Maximum working RPM
 
-#define MOTOR_MAX_PERIOD  150000 // Min timer period in us, RPM = 1 (before gear)
-#define MOTOR_MIN_PERIOD  150    // Max timer period in us, RPM = 1000 (before gear)
+#define MOTOR_MAX_PERIOD  150000 // Max timer period in us, RPM = 1 (before gear)
+#define MOTOR_MIN_PERIOD  150    // Min timer period in us, RPM = 1000 (before gear)
 
 #define MOTOR_DIRECTION   LOW // LOW = forward, HIGH = backward
 #define MOTOR_PWM_DUTY    512 // 50% duty cycle, max 1024
 
-#define MOTOR_ACCEL       1.0f // Acceleration
-#define MOTOR_DECEL       1.0f // Deceleration
+#define MOTOR_ACCEL       1.0f // Acceleration, smaller slower, higher is faster
+#define MOTOR_DECEL       1.0f // Deceleration, smaller slower, higher is faster
 
 #define MOTOR_ACC_PERIOD  1 // Acceleration update period in ms
 
-#define MOTOR_DIR_PIN     8
-#define MOTOR_PUL_PIN     9
-
-// Other constants
-#define ONE_MIL_DOUBLE 1000000.
+#define MOTOR_DIR_PIN     8 // Motor direction pin (digital pin 8)
+#define MOTOR_PUL_PIN     9 // Motor pulse pin (digital pin 9)
 
 // Motor nominal period in microseconds
 static const double MOTOR_NOM_PERIOD =
-    (60. * ONE_MIL_DOUBLE) / ((double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
+    (60. * 1000. * 1000.) / ((double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
 
 // Motor step counter
 volatile unsigned long motor_step_count = 0; // use volatile for shared variables
@@ -74,13 +71,17 @@ static void setupMotor()
     Timer1.stop();
 }
 
-float calculateNewMotorSpeed(float start_speed, long distance, unsigned long end_time)
+float calculateNewMotorSpeed(float start_speed, float distance, unsigned int end_time)
 {
     static const float MIN_MOTOR_TARGET_SPEED = (float)MOTOR_MIN_RPM / MOTOR_NOM_RPM; // 100 RPM
     static const float MAX_MOTOR_TARGET_SPEED = (float)MOTOR_MAX_RPM / MOTOR_NOM_RPM; // 500 RPM
 
+    // End time can not be zero
+    if (end_time < 1)
+        end_time = 1;
+
     // Get target speed
-    float target_speed = (float)distance / end_time;
+    float target_speed = distance / (float)end_time;
 
     // Return if target speed is not within boundaries
     if (target_speed < MIN_MOTOR_TARGET_SPEED)
@@ -99,12 +100,12 @@ float calculateNewMotorSpeed(float start_speed, long distance, unsigned long end
     if (target_speed >= start_speed)
     {
         float d   = (float)MOTOR_ACCEL * end_time;
-        end_speed = start_speed + d - sqrtf(d * (d + 2.0f * (start_speed - target_speed)));
+        end_speed = start_speed + d - sqrtf(fabsf(d * (d + 2.0f * (start_speed - target_speed))));
     }
     else
     {
         float d   = (float)-MOTOR_DECEL * end_time;
-        end_speed = start_speed + d + sqrtf(d * (d + 2.0f * (start_speed - target_speed)));
+        end_speed = start_speed + d + sqrtf(fabsf(d * (d + 2.0f * (start_speed - target_speed))));
     }
 
     // Clip end speed
@@ -122,7 +123,7 @@ static unsigned long motor_accel_iter_pos      = 0;
 static unsigned long motor_accel_iter_cnt      = 0;
 static unsigned long motor_accel_start_time_us = micros();
 
-static void beginMotorAcceleration(long distance, unsigned long end_time)
+static void beginMotorAcceleration(float distance, unsigned int end_time)
 {
     motor_start_speed  = motor_current_speed;
     motor_target_speed = calculateNewMotorSpeed(motor_start_speed, distance, end_time);
@@ -133,8 +134,8 @@ static void beginMotorAcceleration(long distance, unsigned long end_time)
     motor_accel_iter_pos = 0;
 
     long count = (long)(fabsf(speed_diff) * (1000.f / MOTOR_ACC_PERIOD) / accel + 0.5f);
-    if (count < 0)
-        count = 0;
+    if (count < 1)
+        count = 1;
     motor_accel_iter_cnt = count;
 
     motor_accel_start_time_us = micros();

@@ -51,10 +51,11 @@
 #define METAL_SENSOR_HOUR_PIN    12 // Metal sensor hour pin (digital pin 12)
 #define METAL_SENSOR_MINUTE_PIN  11 // Metal sensor minute pin (digital pin 11)
 
-#define METAL_SENSOR_HOUR_POS    3 // Metal sensor hour position, sitting at 03:00
+#define METAL_SENSOR_HOUR_POS    3     // Metal sensor hour position, sitting at 03:00
+#define METAL_SENSOR_MINUTE_POS  (-15) // Metal sensor minute position, in seconds
 
-#define METAL_SENSOR_CHECK_COUNT 4   // How many checks to perform for each metal sensor
-#define METAL_SENSOR_CHECK_DELAY 100 // Amount of time between each metal sensor check in ms
+#define METAL_SENSOR_CHECK_COUNT 4  // How many checks to perform for each metal sensor
+#define METAL_SENSOR_CHECK_DELAY 80 // Amount of time between each metal sensor check in ms
 
 // GPS serial port pins
 #define GPS_PORT_RX_PIN          2 // GPS serial port RX pin (digital pin 2, attached to TX of GPS module)
@@ -80,9 +81,6 @@ typedef uint32_t       clock12_t;
 static const clock12_t DEF_SECONDS_PER_MINUTE = 60;
 static const clock12_t DEF_SECONDS_PER_HOUR   = 60 * DEF_SECONDS_PER_MINUTE;
 static const clock12_t DEF_SECONDS_PER_CLOCK  = 12 * DEF_SECONDS_PER_HOUR;
-
-// Other constants
-#define ONE_MIL_DOUBLE 1000000.
 
 
 //==============================//
@@ -245,7 +243,7 @@ static clock12_t getAdjustedRTCTime()
 
 // Motor nominal period in microseconds
 static const double MOTOR_NOM_PERIOD =
-    (60. * ONE_MIL_DOUBLE) / ((double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
+    (60. * 1000. * 1000.) / ((double)MOTOR_STEPS * MOTOR_MICRO_STEPS * MOTOR_NOM_RPM); // 882.35 microseconds per step
 
 // Motor step counter
 volatile unsigned long motor_step_count = 0; // use volatile for shared variables
@@ -291,7 +289,7 @@ static void setupMotor()
     Timer1.stop();
 }
 
-float calculateNewMotorSpeed(float start_speed, long distance, unsigned long end_time)
+float calculateNewMotorSpeed(float start_speed, float distance, unsigned int end_time)
 {
     static const float MIN_MOTOR_TARGET_SPEED = (float)MOTOR_MIN_RPM / MOTOR_NOM_RPM; // 100 RPM
     static const float MAX_MOTOR_TARGET_SPEED = (float)MOTOR_MAX_RPM / MOTOR_NOM_RPM; // 500 RPM
@@ -301,7 +299,7 @@ float calculateNewMotorSpeed(float start_speed, long distance, unsigned long end
         end_time = 1;
 
     // Get target speed
-    float target_speed = (float)distance / end_time;
+    float target_speed = distance / (float)end_time;
 
     // Return if target speed is not within boundaries
     if (target_speed < MIN_MOTOR_TARGET_SPEED)
@@ -343,7 +341,7 @@ static unsigned long motor_accel_iter_pos      = 0;
 static unsigned long motor_accel_iter_cnt      = 0;
 static unsigned long motor_accel_start_time_us = micros();
 
-static void beginMotorAcceleration(long distance, unsigned long end_time)
+static void beginMotorAcceleration(float distance, unsigned int end_time)
 {
     motor_start_speed  = motor_current_speed;
     motor_target_speed = calculateNewMotorSpeed(motor_start_speed, distance, end_time);
@@ -505,7 +503,8 @@ State loop flow:
 Using three states and going through them every half a minute:
 1. GPS read (2 seconds), RTC update and calculate new speed
 2. Accelerate motor to new speed (around 1 second)
-3. Wait for half minute to end, then update and write clock time
+3. Wait for half minute to end, then update clock time
+4. Lastly write clock time and reset GPS
 
 At all times:
 - Read zero minutes metal sensor
@@ -519,16 +518,18 @@ enum LoopState
     STATE_WRITE_TIME = 3
 };
 
-static clock12_t clockTime          = 0; // Mechanical clock time in seconds
-static clock12_t prev_motor_seconds = 0; // Seconds since last zero minutes trigger
+static clock12_t clockTime_sec = 0; // Mechanical clock time in seconds
+static clock12_t clockTime_ms  = 0; // Mechanical clock time in milliseconds
+static clock12_t prev_motor_ms = 0; // Milliseconds since last zero minutes trigger
 
 void setupClock()
 {
-    readClockTimeFromEEPROM(clockTime, SECONDS_PER_STATE_LOOP);
+    readClockTimeFromEEPROM(clockTime_sec, SECONDS_PER_STATE_LOOP);
 
-    prev_motor_seconds = clockTime % DEF_SECONDS_PER_HOUR;
+    clockTime_ms  = clockTime_sec * 1000;
+    prev_motor_ms = (clockTime_sec % DEF_SECONDS_PER_HOUR) * 1000;
 
-    setMotorStepCount((unsigned long)((double)prev_motor_seconds / MOTOR_NOM_PERIOD * ONE_MIL_DOUBLE + 0.5));
+    setMotorStepCount((unsigned long)((double)prev_motor_ms * 1000. / MOTOR_NOM_PERIOD + 0.5));
 }
 
 void updateClock()
@@ -560,8 +561,8 @@ void updateClock()
                 gpsPort.ignore();
 
                 // Get distance from clock time to RTC time + one state loop from now
-                long distance =
-                    (getAdjustedRTCTime() + SECONDS_PER_STATE_LOOP + DEF_SECONDS_PER_CLOCK - clockTime) % DEF_SECONDS_PER_CLOCK;
+                clock12_t rtcTime_ms = (getAdjustedRTCTime() + SECONDS_PER_STATE_LOOP + DEF_SECONDS_PER_CLOCK) * 1000;
+                float     distance   = ((rtcTime_ms - clockTime_ms) % (DEF_SECONDS_PER_CLOCK * 1000)) / 1000.f;
 
                 // Distance becomes negative if more than 6 hours
                 if (distance > DEF_SECONDS_PER_CLOCK / 2)
@@ -605,21 +606,20 @@ void updateClock()
             {
                 zero_minutes_reached = false;
 
-                // Check zero hours metal sensor
-                if (isClockAtZeroHours())
-                {
-                    // Set clock time to 3:00, as the hour sensor is located at 3:00
-                    clockTime = METAL_SENSOR_HOUR_POS * DEF_SECONDS_PER_HOUR;
-                }
-                else
-                {
-                    // Round the clock time to a whole hour
-                    clock12_t hours = (clockTime + DEF_SECONDS_PER_HOUR / 2) / DEF_SECONDS_PER_HOUR;
-                    clockTime       = (hours * DEF_SECONDS_PER_HOUR) % DEF_SECONDS_PER_CLOCK;
-                }
+                // Get current hour
+                // If zero hours metal sensor is triggered,
+                // set clock time to 3:00, as the hour sensor is located at 3:00
+                // Otherwise, round the current clock time to a whole hour
+                clock12_t hours = isClockAtZeroHours() ? METAL_SENSOR_HOUR_POS
+                                                       : (clockTime_sec + DEF_SECONDS_PER_HOUR / 2) / DEF_SECONDS_PER_HOUR;
 
-                // Reset previous motor seconds
-                prev_motor_seconds = clockTime % DEF_SECONDS_PER_HOUR;
+                // Get zero minutes metal sensor offset in seconds
+                clock12_t offset_sec = DEF_SECONDS_PER_CLOCK + METAL_SENSOR_MINUTE_POS;
+
+                // Set new clock time
+                clockTime_sec = (hours * DEF_SECONDS_PER_HOUR + offset_sec) % DEF_SECONDS_PER_CLOCK;
+                clockTime_ms  = clockTime_sec * 1000;
+                prev_motor_ms = (clockTime_sec % DEF_SECONDS_PER_HOUR) * 1000;
 
                 // End of loop reached
                 loop_start_time_ms = current_time;
@@ -630,11 +630,13 @@ void updateClock()
             // Otherwise, update clock time if end of loop reached
             else if (current_time - loop_start_time_ms >= SECONDS_PER_STATE_LOOP * 1000)
             {
-                // Update clock time by motor steps
-                clock12_t curr_motor_seconds =
-                    (clock12_t)((double)getMotorStepCount() / ONE_MIL_DOUBLE * MOTOR_NOM_PERIOD + 0.5);
-                clockTime          = (clockTime + (curr_motor_seconds - prev_motor_seconds)) % DEF_SECONDS_PER_CLOCK;
-                prev_motor_seconds = curr_motor_seconds;
+                // Get current milliseconds since last zero minutes trigger using motor step count
+                clock12_t curr_motor_ms = (clock12_t)((double)getMotorStepCount() * MOTOR_NOM_PERIOD / 1000. + 0.5);
+
+                // Set new clock time
+                clockTime_ms  = (clockTime_ms + (curr_motor_ms - prev_motor_ms)) % (DEF_SECONDS_PER_CLOCK * 1000);
+                clockTime_sec = (clockTime_ms + 500) / 1000;
+                prev_motor_ms = curr_motor_ms;
 
                 // End of loop reached
                 loop_start_time_ms = current_time;
@@ -653,13 +655,13 @@ void updateClock()
         case STATE_WRITE_TIME:
         {
             // Write updated clock time to EEPROM
-            writeClockTimeToEEPROM(clockTime, SECONDS_PER_STATE_LOOP);
+            writeClockTimeToEEPROM(clockTime_sec, SECONDS_PER_STATE_LOOP);
 
 #ifdef SERIAL_DEBUG
             // Get hours, minutes, seconds
-            uint8_t hours   = clockTime / DEF_SECONDS_PER_HOUR;
-            uint8_t minutes = (clockTime % DEF_SECONDS_PER_HOUR) / DEF_SECONDS_PER_MINUTE;
-            uint8_t seconds = clockTime % DEF_SECONDS_PER_MINUTE;
+            uint8_t hours   = clockTime_sec / DEF_SECONDS_PER_HOUR;
+            uint8_t minutes = (clockTime_sec % DEF_SECONDS_PER_HOUR) / DEF_SECONDS_PER_MINUTE;
+            uint8_t seconds = clockTime_sec % DEF_SECONDS_PER_MINUTE;
 
             // Print mechanical clock time
             Serial.println();
