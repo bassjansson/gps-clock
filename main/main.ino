@@ -524,12 +524,13 @@ static clock12_t prev_motor_ms = 0; // Milliseconds since last zero minutes trig
 
 void setupClock()
 {
+    // Read clock time from EEPROM
     readClockTimeFromEEPROM(clockTime_sec, SECONDS_PER_STATE_LOOP);
+    clockTime_ms = clockTime_sec * 1000;
 
-    clockTime_ms  = clockTime_sec * 1000;
-    prev_motor_ms = (clockTime_sec % DEF_SECONDS_PER_HOUR) * 1000;
-
-    setMotorStepCount((unsigned long)((double)prev_motor_ms * 1000. / MOTOR_NOM_PERIOD + 0.5));
+    // Reset motor step count and time
+    setMotorStepCount(0);
+    prev_motor_ms = 0;
 }
 
 void updateClock()
@@ -545,7 +546,10 @@ void updateClock()
         {
             zero_minutes_reached      = true;
             zero_minutes_trigger_time = millis();
+
+            // Reset motor step count and time
             setMotorStepCount(0);
+            prev_motor_ms = 0;
         }
     }
 
@@ -626,7 +630,6 @@ void updateClock()
                 // Set new clock time
                 clockTime_sec = (hours * DEF_SECONDS_PER_HOUR + offset_sec) % DEF_SECONDS_PER_CLOCK;
                 clockTime_ms  = clockTime_sec * 1000;
-                prev_motor_ms = (clockTime_sec % DEF_SECONDS_PER_HOUR) * 1000;
 
                 // End of loop reached
                 loop_start_time_ms = current_time;
@@ -637,12 +640,14 @@ void updateClock()
             // Otherwise, update clock time if end of loop reached
             else if (current_time - loop_start_time_ms >= SECONDS_PER_STATE_LOOP * 1000)
             {
-                // Get current milliseconds since last zero minutes trigger using motor step count
+                // Get current motor time since last zero minutes trigger
                 clock12_t curr_motor_ms = (clock12_t)((double)getMotorStepCount() * MOTOR_NOM_PERIOD / 1000. + 0.5);
 
                 // Set new clock time
                 clockTime_ms  = (clockTime_ms + (curr_motor_ms - prev_motor_ms)) % (DEF_SECONDS_PER_CLOCK * 1000);
                 clockTime_sec = (clockTime_ms + 500) / 1000;
+
+                // Update previous with current motor time
                 prev_motor_ms = curr_motor_ms;
 
                 // End of loop reached

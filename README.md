@@ -1,6 +1,6 @@
 # GPS Clock
 
-Arduino code for a DC motor driven GPS clock.
+Arduino code for a stepper motor driven GPS clock.
 
 ## Bass Jansson
 
