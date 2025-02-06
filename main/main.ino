@@ -535,11 +535,18 @@ void setupClock()
 void updateClock()
 {
     // Always check zero minutes sensor first
-    static bool zero_minutes_reached = false;
-    if (isClockAtZeroMinutes())
+    static bool                zero_minutes_reached      = false;
+    static unsigned long       zero_minutes_trigger_time = DEF_SECONDS_PER_CLOCK * 1000; // Arbitrarely large initialization
+    static const unsigned long ZERO_MINUTES_TRIGGER_WAIT = DEF_SECONDS_PER_MINUTE * 10 * 1000; // 10 minutes in milliseconds
+
+    if (millis() - zero_minutes_trigger_time >= ZERO_MINUTES_TRIGGER_WAIT)
     {
-        zero_minutes_reached = true;
-        setMotorStepCount(0);
+        if (isClockAtZeroMinutes())
+        {
+            zero_minutes_reached      = true;
+            zero_minutes_trigger_time = millis();
+            setMotorStepCount(0);
+        }
     }
 
     // Switch state

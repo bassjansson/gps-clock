@@ -53,6 +53,9 @@ static void readClockTimeFromEEPROM(clock12_t& clock_time, clock12_t resolution)
 
 static void writeClockTimeToEEPROM(const clock12_t& clock_time, clock12_t resolution)
 {
+    if (resolution < 1)
+        resolution = 1;
+
     int t1 = (clock_time % DEF_SECONDS_PER_CLOCK) / resolution;
 
     static int prev_t1 = -1;
