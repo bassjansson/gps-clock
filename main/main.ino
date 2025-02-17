@@ -20,7 +20,7 @@
 //==================================//
 
 // Enable serial debug
-#define SERIAL_DEBUG
+// #define SERIAL_DEBUG
 
 // State loop settings
 #define SECONDS_PER_STATE_LOOP   30 // Duration of state loop, 30 seconds = half a minute
@@ -518,6 +518,8 @@ enum LoopState
     STATE_WRITE_TIME = 3
 };
 
+static const clock12_t ZERO_MINUTES_WAIT_MS = DEF_SECONDS_PER_MINUTE * 10 * 1000; // 10 minutes in milliseconds
+
 static clock12_t clockTime_sec = 0; // Mechanical clock time in seconds
 static clock12_t clockTime_ms  = 0; // Mechanical clock time in milliseconds
 static clock12_t prev_motor_ms = 0; // Milliseconds since last zero minutes trigger
@@ -528,28 +530,25 @@ void setupClock()
     readClockTimeFromEEPROM(clockTime_sec, SECONDS_PER_STATE_LOOP);
     clockTime_ms = clockTime_sec * 1000;
 
-    // Reset motor step count and time
-    setMotorStepCount(0);
-    prev_motor_ms = 0;
+    // Setup motor time and step count
+    prev_motor_ms = ZERO_MINUTES_WAIT_MS;
+    setMotorStepCount((unsigned long)((double)prev_motor_ms * 1000. / MOTOR_NOM_PERIOD + 0.5));
 }
 
 void updateClock()
 {
     // Always check zero minutes sensor first
-    static bool                zero_minutes_reached      = false;
-    static unsigned long       zero_minutes_trigger_time = DEF_SECONDS_PER_CLOCK * 1000; // Arbitrarely large initialization
-    static const unsigned long ZERO_MINUTES_TRIGGER_WAIT = DEF_SECONDS_PER_MINUTE * 10 * 1000; // 10 minutes in milliseconds
+    static bool zero_minutes_reached = false;
 
-    if (millis() - zero_minutes_trigger_time >= ZERO_MINUTES_TRIGGER_WAIT)
+    if (prev_motor_ms >= ZERO_MINUTES_WAIT_MS)
     {
         if (isClockAtZeroMinutes())
         {
-            zero_minutes_reached      = true;
-            zero_minutes_trigger_time = millis();
+            zero_minutes_reached = true;
 
-            // Reset motor step count and time
-            setMotorStepCount(0);
+            // Reset motor time and step count
             prev_motor_ms = 0;
+            setMotorStepCount(0);
         }
     }
 
@@ -642,6 +641,8 @@ void updateClock()
             {
                 // Get current motor time since last zero minutes trigger
                 clock12_t curr_motor_ms = (clock12_t)((double)getMotorStepCount() * MOTOR_NOM_PERIOD / 1000. + 0.5);
+                if (curr_motor_ms < prev_motor_ms)
+                    curr_motor_ms = prev_motor_ms;
 
                 // Set new clock time
                 clockTime_ms  = (clockTime_ms + (curr_motor_ms - prev_motor_ms)) % (DEF_SECONDS_PER_CLOCK * 1000);
